@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>情感中枢系统 - 研究平台</title>
+<style>
+  /* 研究平台配色：和开发者控制台一个路数的深色科技风 */
+  :root {
+    --bg: #0b1120;
+    --panel: #111a2e;
+    --panel-2: #16203a;
+    --line: #23304f;
+    --text: #dbe4ff;
+    --dim: #8393bb;
+    --cyan: #38bdf8;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    min-height: 100vh;
+    padding: 18px 22px 40px;
+  }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+  header h1 { font-size: 20px; letter-spacing: 1px; }
+  header h1 span { color: var(--cyan); }
+  header .sub { color: var(--dim); font-size: 12px; }
+  header .spacer { flex: 1; }
+  button {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 14px; font-size: 13px; cursor: pointer;
+  }
+  button:hover { border-color: var(--cyan); color: var(--cyan); }
+  button.primary { background: #0e7490; border-color: #0e7490; color: #fff; }
+  button.primary:hover { background: #0891b2; color: #fff; }
+  button.danger { color: var(--red); }
+  button.danger:hover { border-color: var(--red); }
+  .grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 16px;
+  }
+  .panel h2 {
+    font-size: 14px; color: var(--cyan); margin-bottom: 10px;
+    padding-left: 8px; border-left: 3px solid var(--cyan);
+  }
+  input[type=text], textarea, select {
+    width: 100%; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 10px; font-size: 13px; font-family: inherit;
+  }
+  textarea { resize: vertical; }
+  textarea.mono, pre.mono { font-family: Consolas, monospace; font-size: 12px; }
+  label { display: block; font-size: 12px; color: var(--dim); margin: 8px 0 4px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > * { flex: 1; }
+  .row > .fit { flex: 0 0 auto; }
+
+  /* 任务卡片 */
+  .task {
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 10px;
+  }
+  .task .t-top { display: flex; align-items: center; gap: 8px; }
+  .task .t-title { font-weight: bold; font-size: 14px; flex: 1; }
+  .badge { font-size: 11px; border-radius: 20px; padding: 2px 10px; }
+  .badge.todo { background: #334155; color: #cbd5e1; }
+  .badge.doing { background: #78350f; color: var(--amber); }
+  .badge.done { background: #064e3b; color: var(--green); }
+  .task .t-desc { color: var(--dim); font-size: 12px; margin: 6px 0; white-space: pre-wrap; }
+  .task .t-kv { font-size: 12px; margin: 4px 0; }
+  .task .t-kv b { color: var(--cyan); }
+  .task pre {
+    background: #0b1120; border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 8px; font-size: 11px; color: #a5b4fc;
+    white-space: pre-wrap; word-break: break-all; margin: 4px 0;
+  }
+  .task .t-btns { display: flex; gap: 6px; margin-top: 6px; }
+  .task .t-btns button { padding: 4px 10px; font-size: 12px; }
+  .empty { color: var(--dim); font-size: 13px; text-align: center; padding: 18px 0; }
+
+  /* 检索结果 */
+  .hit { border-bottom: 1px dashed var(--line); padding: 8px 2px; }
+  .hit a { color: var(--cyan); text-decoration: none; font-size: 13px; font-weight: bold; }
+  .hit a:hover { text-decoration: underline; }
+  .hit .meta { color: var(--dim); font-size: 11px; margin: 2px 0; }
+  .hit .snip { font-size: 12px; color: var(--text); opacity: .85; }
+
+  #output { min-height: 120px; max-height: 320px; overflow: auto; }
+
+  /* 自主工作控制条 */
+  .agent-bar {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 10px 16px; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .agent-bar .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex: 0 0 auto; }
+  .agent-bar .dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .agent-bar .dot.busy { background: var(--amber); box-shadow: 0 0 8px var(--amber); animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  .agent-bar .astate { font-size: 12px; color: var(--dim); min-width: 220px; }
+  .agent-bar .astate b { color: var(--text); }
+  .agent-bar select { width: auto; padding: 5px 8px; font-size: 12px; }
+  .agent-bar label { margin: 0; display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text); }
+  .switch { position: relative; width: 38px; height: 20px; display: inline-block; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider2 {
+    position: absolute; inset: 0; background: #334155; border-radius: 20px; cursor: pointer; transition: .2s;
+  }
+  .slider2::before {
+    content: ''; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px;
+    background: #fff; border-radius: 50%; transition: .2s;
+  }
+  .switch input:checked + .slider2 { background: #0e7490; }
+  .switch input:checked + .slider2::before { transform: translateX(18px); }
+
+  /* 对话区 */
+  .chat-box {
+    background: #0b1120; border: 1px solid var(--line); border-radius: 8px;
+    height: 330px; overflow-y: auto; padding: 10px; margin-bottom: 8px;
+  }
+  .msg { display: flex; margin-bottom: 9px; gap: 8px; }
+  .msg.me { flex-direction: row-reverse; }
+  .msg .who { font-size: 11px; color: var(--dim); margin-bottom: 2px; }
+  .msg .bubble {
+    max-width: 82%; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 7px 11px; font-size: 13px; line-height: 1.6;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .msg.me .bubble { background: #0e7490; border-color: #0e7490; color: #fff; }
+  .msg.auto .bubble { border-color: #78350f; }
+  .msg .tag { font-size: 10px; color: var(--amber); margin-left: 5px; }
+  .chat-typing { font-size: 12px; color: var(--amber); height: 16px; margin-bottom: 4px; }
+
+  /* 入页提醒弹窗：每次点进来都先看到这个 */
+  .mask {
+    position: fixed; inset: 0; background: rgba(2, 6, 18, .78);
+    display: flex; align-items: center; justify-content: center; z-index: 99;
+  }
+  .modal {
+    width: 460px; max-width: 92vw;
+    background: var(--panel); border: 1px solid var(--cyan);
+    border-radius: 14px; padding: 22px 24px;
+    box-shadow: 0 0 40px rgba(56, 189, 248, .25);
+  }
+  .modal h3 { color: var(--cyan); font-size: 17px; margin-bottom: 12px; }
+  .modal li { font-size: 13px; line-height: 1.9; margin-left: 18px; color: var(--text); }
+  .modal li b { color: var(--amber); }
+  .modal .ok-btn { width: 100%; margin-top: 16px; padding: 10px; font-size: 14px; }
+  .toast {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+    background: #064e3b; color: var(--green); border: 1px solid var(--green);
+    padding: 8px 18px; border-radius: 8px; font-size: 13px; display: none; z-index: 98;
+  }
+  .toast.err { background: #450a0a; color: var(--red); border-color: var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔬 研究平台 <span>/ 小助手的自留地</span></h1>
+  <span class="sub">免登录 · 仅限本机 · 数据在 data/research/</span>
+  <div class="spacer"></div>
+  <button onclick="location.href='/'">← 返回主界面</button>
+  <button onclick="openVscode()">🛠 VS Code 打开工作台</button>
+  <button onclick="loadAll()">↻ 刷新</button>
+</header>
+
+<!-- 自主工作控制条 -->
+<div class="agent-bar">
+  <span class="dot" id="agent-dot"></span>
+  <label>角色
+    <select id="agent-bot" onchange="saveAgentCfg()"></select>
+  </label>
+  <label class="switch" title="到点她自己醒来干活">
+    <input type="checkbox" id="agent-enabled" onchange="saveAgentCfg()">
+    <span class="slider2"></span>
+  </label>
+  <span style="font-size:12px;">自主工作</span>
+  <label>每
+    <select id="agent-interval" onchange="saveAgentCfg()">
+      <option value="5">5 分钟</option>
+      <option value="15">15 分钟</option>
+      <option value="30" selected>30 分钟</option>
+      <option value="60">1 小时</option>
+      <option value="120">2 小时</option>
+    </select>
+    一轮
+  </label>
+  <label class="switch" title="关掉后不再先写推理，省大量输出 token">
+    <input type="checkbox" id="agent-thinking" onchange="saveAgentCfg()">
+    <span class="slider2"></span>
+  </label>
+  <span style="font-size:12px;">深度思考</span>
+  <label title="单次生成上限，脚本正文也算在内">输出上限
+    <input type="number" id="agent-maxtokens" min="512" max="16384" step="256" style="width:80px;" onchange="saveAgentCfg()">
+  </label>
+  <button class="fit" style="padding:5px 12px;" onclick="wakeHer()">🔔 立刻叫醒她</button>
+  <span class="astate" id="agent-state">状态读取中…</span>
+</div>
+
+<div class="grid">
+  <div>
+    <!-- 任务板 -->
+    <div class="panel">
+      <h2 id="form-title">📌 添加研究任务</h2>
+      <input type="hidden" id="edit-id">
+      <label>标题 *</label>
+      <input type="text" id="f-title" placeholder="比如：试一下 arXiv 摘要抓取脚本">
+      <label>说明 / 思路</label>
+      <textarea id="f-desc" rows="2" placeholder="这个任务要干嘛、打算怎么做"></textarea>
+      <label>参数（JSON 对象，可以随便定字段）</label>
+      <textarea id="f-params" class="mono" rows="3" placeholder='{"source": "arxiv", "rounds": 3}'>{}</textarea>
+      <label>结论 / 阶段结果（可选）</label>
+      <input type="text" id="f-result" placeholder="跑完之后把结论写这儿">
+      <div class="row" style="margin-top:10px;">
+        <button class="primary fit" onclick="saveTask()" id="btn-save">➕ 添加任务</button>
+        <button class="fit" onclick="resetForm()" id="btn-cancel" style="display:none;">取消编辑</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>🗂 任务板 <span class="sub" id="task-count"></span></h2>
+      <div id="task-list"><div class="empty">还没有任务</div></div>
+    </div>
+  </div>
+
+  <div>
+    <!-- 和她对话 -->
+    <div class="panel">
+      <h2>💬 和她对话 <span class="sub" style="font-size:11px;">（说的每句话她都真的会调工具去做）</span>
+        <button class="danger fit" style="float:right;padding:3px 10px;font-size:11px;" onclick="clearChat()">清空</button>
+      </h2>
+      <div class="chat-box" id="chat-box">
+        <div class="empty">还没说过话。给她派活，或者打开上面的自主工作开关让她自己跑。</div>
+      </div>
+      <div class="chat-typing" id="chat-typing"></div>
+      <div class="row">
+        <input type="text" id="chat-input" placeholder="跟她说点什么，比如：去 arXiv 看看最近 RAG 评测有什么新花样"
+               onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="primary fit" onclick="sendChat()" id="btn-send">发送</button>
+      </div>
+    </div>
+
+    <!-- 检索 -->
+    <div class="panel">
+      <h2>🔎 论文 / 新闻检索</h2>
+      <div class="row">
+        <select id="s-source" class="fit">
+          <option value="papers">📚 论文（arXiv）</option>
+          <option value="news">📰 新闻（RSS）</option>
+        </select>
+        <input type="text" id="s-q" placeholder="关键词（新闻可留空看最新）">
+        <button class="primary fit" onclick="doSearch()">搜</button>
+      </div>
+      <div id="search-result" style="margin-top:10px;"><div class="empty">输入关键词搜一波</div></div>
+    </div>
+
+    <!-- 跑码 -->
+    <div class="panel">
+      <h2>⚡ 代码实验台（免授权，单次最长 10 分钟）</h2>
+      <div class="row">
+        <select id="r-lang" class="fit">
+          <option value="python">Python</option>
+          <option value="node">Node.js</option>
+        </select>
+        <input type="text" id="r-name" placeholder="脚本名（可选，如 exp1.py）">
+        <button class="primary fit" onclick="runCode()">▶ 运行</button>
+      </div>
+      <label>代码（保存到 data/research/workspace/ 再跑）</label>
+      <textarea id="r-code" class="mono" rows="9">print("hello from 研究平台")</textarea>
+      <label>输出</label>
+      <pre id="output" class="mono">（等待运行）</pre>
+    </div>
+
+    <!-- 笔记 -->
+    <div class="panel">
+      <h2>📝 研究方向笔记</h2>
+      <textarea id="note" rows="7" placeholder="方向、想法、下一步……"></textarea>
+      <div class="row" style="margin-top:8px;">
+        <button class="primary fit" onclick="saveNote()">💾 保存笔记</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 入页提醒：每次点进来都会弹 -->
+<div class="mask" id="remind-mask">
+  <div class="modal">
+    <h3>⚠️ 研究平台使用提醒</h3>
+    <ul>
+      <li>这里<b>仅限本机打开</b>：不要求登录，但局域网和外网的其它机器都进不来。</li>
+      <li>这是给小助手划的<b>免授权自留地</b>：她在里面添任务、改参数、跑代码都不再逐次找你确认。</li>
+      <li>跑码只认 <b>data/research/workspace/</b> 里的脚本，单次最长 <b>10 分钟</b>，到点强制掐掉。</li>
+      <li>任务、笔记、运行记录都存在 <b>data/research/</b> 下，删了可就找不回来了。</li>
+      <li>页面上可以直接<b>跟她对话派活</b>；打开「自主工作」开关后，她会按间隔自己醒来查任务板、立项、跑代码，进展发在对话区，全程不用你管。</li>
+      <li>想看她干了什么，翻任务板和 runs.log 就行 🍿</li>
+    </ul>
+    <button class="ok-btn primary" onclick="closeRemind()">知道了，进去干活</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ---- 小工具 ----
+  function $(id) { return document.getElementById(id); }
+  function toast(msg, err) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (err ? ' err' : '');
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 2200);
+  }
+  async function api(url, opts) {
+    const resp = await fetch(url, opts);
+    const data = await resp.json().catch(() => ({ success: false, message: '响应不是 JSON' }));
+    if (!resp.ok || data.success === false) {
+      throw new Error(data.message || ('HTTP ' + resp.status));
+    }
+    return data;
+  }
+  function closeRemind() { $('remind-mask').style.display = 'none'; }
+
+  // ---- 任务板 ----
+  // 转义用于插入 HTML；同时转义引号：esc() 的结果会落进 href/属性值/内联属性里，
+  // 只转义 &<> 会让外部数据（arXiv 抓回的结果）用引号闭合属性、注入新属性
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+  const STATUS_NAME = { todo: '待开', doing: '进行', done: '完成' };
+
+  async function loadTasks() {
+    const data = await api('/api/research/tasks');
+    const box = $('task-list');
+    $('task-count').textContent = data.tasks.length ? `共 ${data.tasks.length} 个` : '';
+    if (!data.tasks.length) {
+      box.innerHTML = '<div class="empty">还没有任务，她自己会来立的（或你在上面加一个）</div>';
+      return;
+    }
+    box.innerHTML = data.tasks.map(t => `
+      <div class="task">
+        <div class="t-top">
+          <span class="badge ${esc(t.status)}">${STATUS_NAME[t.status] || esc(t.status)}</span>
+          <span class="t-title">${esc(t.title)}</span>
+          <span class="meta" style="color:var(--dim);font-size:11px;">${esc(t.id)}</span>
+        </div>
+        ${t.desc ? `<div class="t-desc">${esc(t.desc)}</div>` : ''}
+        ${t.params && Object.keys(t.params).length ? `<div class="t-kv"><b>参数</b></div><pre>${esc(JSON.stringify(t.params, null, 2))}</pre>` : ''}
+        ${t.result ? `<div class="t-kv"><b>结论</b> ${esc(t.result)}</div>` : ''}
+        <div class="t-btns">
+          <button onclick="editTask('${esc(t.id)}')">✏️ 编辑</button>
+          <select class="fit" style="width:auto;padding:4px 8px;font-size:12px;" onchange="setStatus('${esc(t.id)}', this.value)">
+            <option value="">改状态…</option>
+            <option value="todo">待开</option>
+            <option value="doing">进行</option>
+            <option value="done">完成</option>
+          </select>
+          <button class="danger" onclick="delTask('${esc(t.id)}')">🗑 删除</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function resetForm() {
+    $('edit-id').value = '';
+    $('f-title').value = '';
+    $('f-desc').value = '';
+    $('f-params').value = '{}';
+    $('f-result').value = '';
+    $('form-title').textContent = '📌 添加研究任务';
+    $('btn-save').textContent = '➕ 添加任务';
+    $('btn-cancel').style.display = 'none';
+  }
+
+  async function saveTask() {
+    let params;
+    try { params = JSON.parse($('f-params').value || '{}'); }
+    catch (e) { toast('参数不是合法 JSON：' + e.message, true); return; }
+    const body = {
+      title: $('f-title').value,
+      desc: $('f-desc').value,
+      params,
+      result: $('f-result').value
+    };
+    const id = $('edit-id').value;
+    if (id) {
+      await api('/api/research/tasks/' + id, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+      });
+      toast('任务已更新');
+    } else {
+      await api('/api/research/tasks', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+      });
+      toast('任务已添加');
+    }
+    resetForm();
+    loadTasks();
+  }
+
+  async function editTask(id) {
+    const data = await api('/api/research/tasks');
+    const t = data.tasks.find(x => x.id === id);
+    if (!t) { toast('任务不存在', true); return; }
+    $('edit-id').value = t.id;
+    $('f-title').value = t.title;
+    $('f-desc').value = t.desc || '';
+    $('f-params').value = JSON.stringify(t.params || {}, null, 2);
+    $('f-result').value = t.result || '';
+    $('form-title').textContent = '✏️ 编辑任务 ' + t.id;
+    $('btn-save').textContent = '💾 保存修改';
+    $('btn-cancel').style.display = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function setStatus(id, status) {
+    if (!status) return;
+    await api('/api/research/tasks/' + id, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status })
+    });
+    toast('状态已更新');
+    loadTasks();
+  }
+
+  async function delTask(id) {
+    if (!confirm('确定删掉任务 ' + id + '？删了找不回来。')) return;
+    await api('/api/research/tasks/' + id, { method: 'DELETE' });
+    toast('已删除');
+    loadTasks();
+  }
+
+  // ---- 检索 ----
+  async function doSearch() {
+    const box = $('search-result');
+    box.innerHTML = '<div class="empty">搜着呢，别急……</div>';
+    try {
+      const q = $('s-q').value.trim();
+      const src = $('s-source').value;
+      const data = await api('/api/research/search?source=' + src + '&max=10&q=' + encodeURIComponent(q));
+      const list = data.papers || data.news || [];
+      if (!list.length) {
+        box.innerHTML = '<div class="empty">一条都没捞着，换个词试试</div>';
+        return;
+      }
+      box.innerHTML = list.map(it => `
+        <div class="hit">
+          <a href="${esc(it.url || it.link)}" target="_blank">${esc(it.title)}</a>
+          <div class="meta">${esc(it.source || 'arXiv')}${it.authors ? ' · ' + esc(it.authors) : ''}${it.date ? ' · ' + esc(it.date) : ''}</div>
+          ${it.summary || it.snippet ? `<div class="snip">${esc(it.summary || it.snippet)}</div>` : ''}
+        </div>
+      `).join('');
+    } catch (e) {
+      box.innerHTML = '<div class="empty">检索失败：' + esc(e.message) + '</div>';
+    }
+  }
+
+  // ---- 跑码 ----
+  async function runCode() {
+    $('output').textContent = '跑着呢……';
+    try {
+      const data = await api('/api/research/run', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          language: $('r-lang').value,
+          name: $('r-name').value.trim(),
+          code: $('r-code').value
+        })
+      });
+      $('output').textContent =
+        `[退出码 ${data.exitCode}] ${data.runtime || ''} ${(data.script || '')}\n` +
+        '---- stdout ----\n' + (data.stdout || '(空)') +
+        '\n---- stderr ----\n' + (data.stderr || '(空)');
+    } catch (e) {
+      $('output').textContent = '运行失败：' + e.message;
+    }
+  }
+
+  // ---- 笔记 ----
+  async function loadNote() {
+    const data = await api('/api/research/note');
+    $('note').value = data.content || '';
+  }
+  async function saveNote() {
+    await api('/api/research/note', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: $('note').value })
+    });
+    toast('笔记已保存');
+  }
+
+  // ---- 对话 + 自主工作 ----
+  let chatCount = -1;       // 已渲染的消息条数，用来判断要不要自动滚底
+  let lastRunning = false;  // 上一次轮询时她是不是在跑，从忙变闲就刷新任务板
+  let sending = false;
+
+  function fmtTime(ts) {
+    if (!ts) return '还没有';
+    const d = new Date(ts);
+    const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    const diff = Date.now() - ts;
+    if (diff < 60000) return '刚刚';
+    if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
+    return hm;
+  }
+
+  async function loadAgent() {
+    try {
+      const [st, botsData] = await Promise.all([
+        api('/api/research/agent'),
+        $('agent-bot').options.length ? Promise.resolve(null) : api('/api/research/bots')
+      ]);
+      if (botsData) {
+        $('agent-bot').innerHTML = botsData.bots.map(b =>
+          `<option value="${esc(b.sessionId)}">${esc(b.name)}</option>`).join('');
+      }
+      $('agent-bot').value = st.sessionId || '';
+      $('agent-enabled').checked = !!st.enabled;
+      $('agent-interval').value = String(st.intervalMin || 30);
+      $('agent-thinking').checked = !!st.thinking;
+      $('agent-maxtokens').value = String(st.maxTokens || 8192);
+
+      const dot = $('agent-dot');
+      dot.className = 'dot' + (st.running ? ' busy' : (st.enabled ? ' on' : ''));
+      let state;
+      if (st.running) {
+        state = '🟠 <b>她正在工作…</b> 工具调用中，稍等';
+      } else if (st.enabled) {
+        const next = st.nextTickAt ? new Date(st.nextTickAt).toTimeString().slice(0, 5) : '--';
+        state = `🟢 自主工作中 · 每 ${st.intervalMin} 分钟一轮 · 下次约 <b>${next}</b> · 上次 ${fmtTime(st.lastTickAt)}`;
+      } else {
+        state = `⚪ 自主模式关闭 · 上次活动 ${fmtTime(st.lastTickAt)}`;
+      }
+      if (st.lastError) state += ` · <span style="color:var(--red)">上次出错：${esc(st.lastError)}</span>`;
+      $('agent-state').innerHTML = state;
+
+      // 她忙完一轮后，任务板可能被改过，顺手刷新
+      if (lastRunning && !st.running) { loadTasks(); }
+      lastRunning = !!st.running;
+    } catch (e) { /* 轮询失败别吵人 */ }
+  }
+
+  async function saveAgentCfg() {
+    try {
+      await api('/api/research/agent', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: $('agent-enabled').checked,
+          intervalMin: parseInt($('agent-interval').value, 10),
+          sessionId: $('agent-bot').value,
+          thinking: $('agent-thinking').checked,
+          maxTokens: parseInt($('agent-maxtokens').value, 10) || 8192
+        })
+      });
+      toast('设置已保存');
+      loadAgent();
+    } catch (e) { toast('保存失败：' + e.message, true); }
+  }
+
+  async function wakeHer() {
+    try {
+      await api('/api/research/agent', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runNow: true })
+      });
+      toast('已叫醒她，去任务板和对话区看进展');
+      lastRunning = true;
+      loadAgent();
+    } catch (e) { toast('叫醒失败：' + e.message, true); }
+  }
+
+  async function loadChat(forceScroll) {
+    try {
+      const data = await api('/api/research/chat');
+      const box = $('chat-box');
+      const msgs = data.messages || [];
+      if (!msgs.length) {
+        box.innerHTML = '<div class="empty">还没说过话。给她派活，或者打开上面的自主工作开关让她自己跑。</div>';
+        chatCount = 0;
+        return;
+      }
+      box.innerHTML = msgs.map(m => {
+        const mine = m.role === 'user';
+        const tag = (!mine && m.auto) ? '<span class="tag">她自己</span>' : '';
+        const who = mine ? '你' : ('她' + tag);
+        return `<div class="msg ${mine ? 'me' : ''} ${m.auto ? 'auto' : ''}">
+          <div>
+            <div class="who">${who} · ${fmtTime(m.ts)}</div>
+            <div class="bubble">${esc(m.content)}</div>
+          </div>
+        </div>`;
+      }).join('');
+      if (forceScroll || msgs.length !== chatCount) {
+        box.scrollTop = box.scrollHeight;
+      }
+      chatCount = msgs.length;
+    } catch (e) { /* 轮询静默 */ }
+  }
+
+  async function sendChat() {
+    if (sending) return;
+    const input = $('chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+    sending = true;
+    input.value = '';
+    $('btn-send').disabled = true;
+    $('chat-typing').textContent = '她在想（可能正在调工具跑代码，久一点正常）…';
+    try {
+      await api('/api/research/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      });
+      await Promise.all([loadChat(true), loadTasks(), loadAgent()]);
+    } catch (e) {
+      toast('发送失败：' + e.message, true);
+      input.value = text;
+    } finally {
+      sending = false;
+      $('btn-send').disabled = false;
+      $('chat-typing').textContent = '';
+      input.focus();
+    }
+  }
+
+  async function clearChat() {
+    if (!confirm('清空这片对话记录？任务板和笔记不受影响。')) return;
+    await api('/api/research/chat', { method: 'DELETE' });
+    chatCount = -1;
+    loadChat();
+    toast('对话已清空');
+  }
+
+  // ---- 其它 ----
+  async function openVscode() {
+    try {
+      const data = await api('/api/research/open-vscode', { method: 'POST' });
+      toast(data.success ? '已呼叫 VS Code 打开工作台' : 'VS Code 没叫动：' + (data.hint || ''), !data.success);
+    } catch (e) { toast('失败：' + e.message, true); }
+  }
+  function loadAll() { loadTasks(); loadNote(); loadAgent(); loadChat(); }
+
+  loadAll();
+  // 每 5 秒瞄一眼：她自主干活的汇报和「正在工作」状态要自己冒出来，不用人刷新
+  setInterval(() => { loadChat(false); loadAgent(); }, 5000);
+</script>
+</body>
+</html>

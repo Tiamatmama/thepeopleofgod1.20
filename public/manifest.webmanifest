@@ -1,0 +1,24 @@
+{
+  "name": "情感中枢 · 酒馆",
+  "short_name": "情感中枢",
+  "description": "情感陪伴 AI、酒馆世界与自托管工作台",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#14171c",
+  "theme_color": "#14171c",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "/icons/app.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "自由创意世界", "short_name": "酒馆", "url": "/creative.html" },
+    { "name": "第一人称逛馆", "short_name": "第一人称", "url": "/creative-fp.html" },
+    { "name": "记忆", "short_name": "记忆", "url": "/memory.html" }
+  ]
+}

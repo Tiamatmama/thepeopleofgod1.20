@@ -1,0 +1,16 @@
+{
+  "name": "hydrant-hollow",
+  "unit": "mm",
+  "type": "hydrant",
+  "outerRadius": 14,
+  "innerRadius": 10,
+  "height": 55,
+  "baseRadius": 22,
+  "baseHeight": 6,
+  "windowCount": 6,
+  "windowZ": 30,
+  "windowHeight": 24,
+  "windowWidth": 10,
+  "nozzleZ": 45,
+  "cell": 1.8
+}

@@ -1,0 +1,17 @@
+source: pairwise.py@60-63 (logaddexp) + pairwise.py@241-294 (bt_fit)
+data:   pairwise_report.json@487-503 (W.persona, W.emotion)
+
+persona_W.json and emotion_W.json are frozen copies of the two W blocks.
+They are kept as separate fixtures on purpose: fitting a mixed W would answer
+a question nobody asked.
+
+Each pair sums to 40. That is a property of the original collection, not a
+schema requirement: weights are pooled counts (integers here), and must not be
+"cleaned" into 0/1 or normalized before fitting.
+
+Expected theta (pairwise_report.json@225-236):
+  persona: old=-0.2725  new=0.4770   old#dup=-0.2045
+  emotion: old=-0.0339  new=-0.3730  old#dup=0.4069
+Tolerance in tests: 1e-3.
+
+The originals are frozen. This directory is a copy; fixes must not flow back.

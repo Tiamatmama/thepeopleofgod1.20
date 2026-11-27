@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "testedModel": "deepseek-flash",
+    "partnerJudgeModel": "doubao-1.5-lite-32k-250115",
+    "rounds": 5,
+    "temperature": {
+      "ds": 0.9,
+      "user": 1,
+      "judge": 0
+    },
+    "affection": 60,
+    "at": "2026-09-22T15:43:10.735Z"
+  },
+  "dimAgg": {
+    "role": [],
+    "voice": [],
+    "coherence": [],
+    "emotion": [],
+    "engagement": []
+  },
+  "hardAgg": {
+    "total": 0,
+    "overLen20": 0,
+    "violations": {},
+    "latinOver03": 0
+  },
+  "scenarios": [
+    {
+      "id": "daily",
+      "name": "日常闲聊",
+      "roundScores": [],
+      "transcript": []
+    },
+    {
+      "id": "comfort",
+      "name": "情感倾诉",
+      "roundScores": [],
+      "transcript": []
+    },
+    {
+      "id": "flirt",
+      "name": "暧昧互动",
+      "roundScores": [],
+      "transcript": []
+    }
+  ]
+}

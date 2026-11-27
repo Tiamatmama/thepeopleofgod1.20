@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>情感中枢系统 · 接入</title>
+    <style>
+        :root {
+            --bg: #08080a;
+            --ink: #e8e4de;
+            --dim: #8a857d;
+            --line: rgba(255, 255, 255, 0.08);
+            --accent: #f4785f;
+            --accent-soft: rgba(244, 120, 95, 0.16);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+            background: var(--bg);
+            color: var(--ink);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        /* 背景：暖色斜光 + 极淡的网格，代替参考图里的人物剪影 */
+        .stage {
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(900px 600px at 78% 18%, rgba(244, 120, 95, 0.14), transparent 62%),
+                radial-gradient(700px 500px at 18% 88%, rgba(120, 90, 70, 0.10), transparent 68%),
+                linear-gradient(135deg, #0a0908 0%, #101010 55%, #0b0a09 100%);
+        }
+        .stage::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(115deg, transparent 0 120px, rgba(255, 255, 255, 0.018) 120px 121px);
+            mask-image: radial-gradient(circle at 70% 30%, #000 0%, transparent 78%);
+        }
+        .stage::after {
+            content: '';
+            position: absolute;
+            right: -6vw;
+            bottom: -12vh;
+            width: 58vw;
+            height: 92vh;
+            background: linear-gradient(200deg, rgba(244, 120, 95, 0.10), rgba(244, 120, 95, 0.015) 55%, transparent 75%);
+            border-radius: 48% 52% 0 0;
+            filter: blur(6px);
+        }
+        .wrap {
+            position: relative;
+            z-index: 2;
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: 1.15fr 1fr;
+            align-items: center;
+            gap: 4vw;
+            padding: 4vh 7vw;
+        }
+        @media (max-width: 900px) {
+            .wrap { grid-template-columns: 1fr; gap: 2rem; padding: 6vh 7vw; }
+            .brand-side { text-align: center; }
+        }
+
+        /* 左侧：标志 + 一行行蹦出来的终端文案 */
+        .brand-side { max-width: 520px; }
+        .star {
+            width: 74px;
+            height: 74px;
+            margin-bottom: 2.2rem;
+            animation: starSpin 46s linear infinite;
+            filter: drop-shadow(0 0 18px rgba(244, 120, 95, 0.45));
+        }
+        @keyframes starSpin { to { transform: rotate(360deg); } }
+        .brand-name {
+            font-size: 1.05rem;
+            letter-spacing: 0.48em;
+            color: var(--ink);
+            margin-bottom: 1.6rem;
+            opacity: 0;
+            animation: lineUp 0.5s ease forwards 0.1s;
+        }
+        .typed {
+            font-family: Consolas, "Courier New", monospace;
+            font-size: clamp(1.5rem, 2.6vw, 2.2rem);
+            color: #f3efe9;
+            min-height: 1.6em;
+            white-space: nowrap;
+        }
+        .typed .caret {
+            display: inline-block;
+            width: 0.55em;
+            height: 1.05em;
+            margin-left: 0.12em;
+            background: var(--accent);
+            vertical-align: -0.12em;
+            animation: blink 1.05s steps(1) infinite;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+        .brand-sub {
+            margin-top: 1.4rem;
+            color: var(--dim);
+            font-size: 0.85rem;
+            line-height: 2;
+            opacity: 0;
+            animation: lineUp 0.6s ease forwards 1.6s;
+        }
+        .brand-foot {
+            margin-top: 3.2rem;
+            font-family: Consolas, monospace;
+            font-size: 0.72rem;
+            letter-spacing: 0.18em;
+            color: rgba(255, 255, 255, 0.28);
+            opacity: 0;
+            animation: lineUp 0.6s ease forwards 2.1s;
+        }
+        @keyframes lineUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 右侧：登录卡片，元素逐行浮现 */
+        .login-container {
+            background: rgba(18, 17, 16, 0.72);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 2.4rem 2.2rem;
+            backdrop-filter: blur(18px);
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+            width: 100%;
+            max-width: 420px;
+            justify-self: end;
+        }
+        @media (max-width: 900px) { .login-container { justify-self: center; } }
+        .reveal { opacity: 0; animation: lineUp 0.45s ease forwards; }
+        .login-title { margin-bottom: 1.9rem; }
+        .login-title h1 { font-size: 1.15rem; font-weight: 600; letter-spacing: 0.12em; }
+        .login-title p { color: var(--dim); font-size: 0.8rem; margin-top: 0.5rem; font-family: Consolas, monospace; }
+        .form-group { margin-bottom: 1.15rem; }
+        .form-label {
+            display: block;
+            font-size: 0.74rem;
+            letter-spacing: 0.16em;
+            color: var(--dim);
+            margin-bottom: 0.5rem;
+        }
+        .form-input {
+            width: 100%;
+            padding: 0.8rem 0.9rem;
+            background: rgba(255, 255, 255, 0.035);
+            border: 1px solid var(--line);
+            border-radius: 9px;
+            color: var(--ink);
+            font-size: 0.95rem;
+            transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: rgba(244, 120, 95, 0.65);
+            background: rgba(244, 120, 95, 0.05);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+        .form-input::placeholder { color: #4b4741; }
+        .btn {
+            width: 100%;
+            padding: 0.8rem;
+            border: none;
+            border-radius: 9px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9rem;
+            letter-spacing: 0.08em;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+            font-family: inherit;
+        }
+        .btn-primary {
+            background: linear-gradient(100deg, #f4785f, #c9553f);
+            color: #14100e;
+            margin-top: 0.35rem;
+        }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 26px rgba(244, 120, 95, 0.28); }
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--ink);
+            border: 1px solid var(--line);
+            margin-top: 0.6rem;
+        }
+        .btn-secondary:hover { background: rgba(255, 255, 255, 0.09); }
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.26);
+            border-radius: 8px;
+            padding: 0.65rem 0.75rem;
+            color: #f0a09a;
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+        .error-message.show { display: block; }
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            color: var(--dim);
+            font-size: 0.8rem;
+        }
+        .remember-me input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+        .toggle-form {
+            text-align: center;
+            margin-top: 1.4rem;
+            color: var(--dim);
+            font-size: 0.8rem;
+        }
+        .toggle-form a { color: var(--accent); text-decoration: none; cursor: pointer; }
+        .toggle-form a:hover { text-decoration: underline; }
+        .hidden { display: none !important; }
+        .loading { opacity: 0.65; pointer-events: none; }
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 13px;
+            height: 13px;
+            border: 2px solid rgba(0, 0, 0, 0.25);
+            border-top-color: #14100e;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-left: 0.5rem;
+            vertical-align: -2px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="stage"></div>
+
+    <div class="wrap">
+        <div class="brand-side">
+            <svg class="star" viewBox="0 0 100 100" aria-hidden="true">
+                <g fill="#f4785f">
+                    <path d="M50 4 L53.4 36.5 L50 44 L46.6 36.5 Z"/>
+                    <path d="M50 96 L46.6 63.5 L50 56 L53.4 63.5 Z"/>
+                    <path d="M4 50 L36.5 46.6 L44 50 L36.5 53.4 Z"/>
+                    <path d="M96 50 L63.5 53.4 L56 50 L63.5 46.6 Z"/>
+                    <path d="M17.5 17.5 L41.2 39.1 L44.5 46.5 L37.1 43.2 Z"/>
+                    <path d="M82.5 82.5 L58.8 60.9 L55.5 53.5 L62.9 56.8 Z"/>
+                    <path d="M82.5 17.5 L60.9 41.2 L53.5 44.5 L56.8 37.1 Z"/>
+                    <path d="M17.5 82.5 L39.1 58.8 L46.5 55.5 L43.2 62.9 Z"/>
+                    <circle cx="50" cy="50" r="4.2" fill="#ffd9cf"/>
+                </g>
+            </svg>
+            <div class="brand-name">情 感 中 枢 系 统</div>
+            <div class="typed"><span id="typed-text"></span><span class="caret"></span></div>
+            <div class="brand-sub">她不是工具，是一个会记得你、也会忘记你的存在。<br>登录之后，默认直接进入她的对话。</div>
+            <div class="brand-foot">EMOTION CORE / OFFLINE BUILD</div>
+        </div>
+
+        <div class="login-container">
+            <div class="login-title reveal" style="animation-delay: 0.15s;">
+                <h1>接入</h1>
+                <p>&gt; verify identity</p>
+            </div>
+
+            <div class="error-message" id="error-message"></div>
+
+            <form id="login-form" class="login-form">
+                <div class="form-group reveal" style="animation-delay: 0.28s;">
+                    <label class="form-label">账号</label>
+                    <input type="text" class="form-input" id="username" placeholder="请输入账号" autocomplete="username">
+                </div>
+
+                <div class="form-group reveal" style="animation-delay: 0.4s;">
+                    <label class="form-label">密码</label>
+                    <input type="password" class="form-input" id="password" placeholder="请输入密码" autocomplete="current-password">
+                </div>
+
+                <div class="remember-me reveal" style="animation-delay: 0.52s;">
+                    <input type="checkbox" id="remember-me">
+                    <label for="remember-me">记住账号</label>
+                </div>
+
+                <button type="submit" class="btn btn-primary reveal" id="submit-btn" style="animation-delay: 0.62s;">进入</button>
+            </form>
+
+            <div class="toggle-form reveal" style="animation-delay: 0.72s;">
+                还没有账号？<a onclick="showRegister()">立即注册</a>
+            </div>
+
+            <form id="register-form" class="login-form hidden">
+                <div class="form-group">
+                    <label class="form-label">账号</label>
+                    <input type="text" class="form-input" id="reg-username" placeholder="请输入账号">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">密码</label>
+                    <input type="password" class="form-input" id="reg-password" placeholder="请输入密码">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">确认密码</label>
+                    <input type="password" class="form-input" id="reg-password-confirm" placeholder="请再次输入密码">
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="reg-submit-btn">注册</button>
+                <button type="button" class="btn btn-secondary" onclick="showLogin()">返回登录</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // 打字机：一行一行吐出，速度可调；打完停住，光标继续闪
+        function typeLine(text, el, speed) {
+            let index = 0;
+            return new Promise(resolve => {
+                (function step() {
+                    if (index > text.length) return resolve();
+                    el.textContent = text.slice(0, index);
+                    index += 1;
+                    setTimeout(step, speed);
+                })();
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            typeLine('> world.execute(me);', document.getElementById('typed-text'), 62);
+        });
+
+        function showError(message) {
+            const errorEl = document.getElementById('error-message');
+            errorEl.textContent = message;
+            errorEl.classList.add('show');
+            setTimeout(() => errorEl.classList.remove('show'), 3000);
+        }
+
+        function showLogin() {
+            document.getElementById('login-form').classList.remove('hidden');
+            document.getElementById('register-form').classList.add('hidden');
+        }
+
+        function showRegister() {
+            document.getElementById('login-form').classList.add('hidden');
+            document.getElementById('register-form').classList.remove('hidden');
+        }
+
+        function saveSession(sessionId, role, username, csrfToken) {
+            localStorage.setItem('sessionId', sessionId);
+            localStorage.setItem('userRole', role);
+            localStorage.setItem('username', username);
+            if (csrfToken) {
+                localStorage.setItem('csrfToken', csrfToken);
+            }
+        }
+
+        function loadRememberedAccount() {
+            const remembered = localStorage.getItem('rememberedAccount');
+            if (remembered) {
+                document.getElementById('username').value = remembered;
+                document.getElementById('remember-me').checked = true;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadRememberedAccount();
+
+            document.getElementById('login-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const username = document.getElementById('username').value.trim();
+                const password = document.getElementById('password').value;
+                const rememberMe = document.getElementById('remember-me').checked;
+                const submitBtn = document.getElementById('submit-btn');
+
+                if (!username || !password) {
+                    showError('请输入账号和密码');
+                    return;
+                }
+
+                submitBtn.classList.add('loading');
+
+                try {
+                    const response = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        // 清掉上一个用户可能留下的 session/user 缓存——
+                        // 否则换账号后还沿用别人手里的角色与记忆状态，串台
+                        ['current-session', 'current-user', 'character-setting', 'user-bots'].forEach(k => localStorage.removeItem(k));
+
+                        saveSession(result.sessionId, result.role, result.username, result.csrfToken);
+
+                        if (rememberMe) {
+                            localStorage.setItem('rememberedAccount', username);
+                        } else {
+                            localStorage.removeItem('rememberedAccount');
+                        }
+
+                        // 统一落到角色聊天页；开发者工具收进右侧抽屉，不再抢占首屏
+                        window.location.href = '/?page=user';
+                    } else {
+                        showError(result.message);
+                    }
+                } catch (error) {
+                    showError('登录失败，请稍后重试');
+                } finally {
+                    submitBtn.classList.remove('loading');
+                }
+            });
+
+            document.getElementById('register-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const username = document.getElementById('reg-username').value.trim();
+                const password = document.getElementById('reg-password').value;
+                const passwordConfirm = document.getElementById('reg-password-confirm').value;
+                const submitBtn = document.getElementById('reg-submit-btn');
+
+                if (!username || !password) {
+                    showError('请输入账号和密码');
+                    return;
+                }
+
+                if (password.length < 6) {
+                    showError('密码长度至少6位');
+                    return;
+                }
+
+                if (password !== passwordConfirm) {
+                    showError('两次输入的密码不一致');
+                    return;
+                }
+
+                submitBtn.classList.add('loading');
+
+                try {
+                    const response = await fetch('/api/auth/register', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        alert('注册成功，请登录');
+                        showLogin();
+                    } else {
+                        showError(result.message);
+                    }
+                } catch (error) {
+                    showError('注册失败，请稍后重试');
+                } finally {
+                    submitBtn.classList.remove('loading');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

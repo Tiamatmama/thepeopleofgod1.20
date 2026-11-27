@@ -1,0 +1,32 @@
+{
+  "name": "stand-with-gear",
+  "unit": "mm",
+  "type": "assembly",
+  "components": [
+    {
+      "spec": {
+        "type": "phone-stand",
+        "name": "stand",
+        "width": 80,
+        "depth": 60,
+        "height": 70,
+        "baseThickness": 6,
+        "backThickness": 8,
+        "lipThickness": 6,
+        "lipHeight": 18
+      },
+      "placement": { "translate": [0, 0, 0] }
+    },
+    {
+      "spec": {
+        "type": "gear",
+        "name": "gear-knob",
+        "teeth": 18,
+        "outerRadius": 25,
+        "rootRadius": 19,
+        "depth": 10
+      },
+      "placement": { "translate": [85, 0, 45], "rotateZ": 90 }
+    }
+  ]
+}

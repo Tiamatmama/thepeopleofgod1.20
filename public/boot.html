@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>情感中枢 · 已就绪</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, sans-serif;
+            background: radial-gradient(circle at 50% 30%, #1f2540 0%, #0d1020 70%);
+            color: #e8ecff;
+            padding: 24px;
+        }
+        .card {
+            width: 100%;
+            max-width: 420px;
+            text-align: center;
+            background: rgba(28, 34, 60, 0.72);
+            border: 1px solid rgba(120, 140, 220, 0.25);
+            border-radius: 16px;
+            padding: 40px 32px;
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+        }
+        .badge {
+            display: inline-block;
+            font-size: 14px;
+            letter-spacing: 1px;
+            color: #7ef0b0;
+            border: 1px solid rgba(126, 240, 176, 0.4);
+            background: rgba(126, 240, 176, 0.1);
+            border-radius: 999px;
+            padding: 6px 14px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        p {
+            font-size: 14px;
+            line-height: 1.7;
+            color: #a9b2d8;
+            margin-bottom: 28px;
+        }
+        .enter {
+            display: inline-block;
+            font-size: 16px;
+            color: #ffffff;
+            text-decoration: none;
+            background: linear-gradient(135deg, #5b7cfa 0%, #7a5bfa 100%);
+            border-radius: 10px;
+            padding: 12px 28px;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .enter:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 24px rgba(91, 124, 250, 0.4);
+        }
+        .hint {
+            margin-top: 18px;
+            font-size: 12px;
+            color: #6f799e;
+        }
+    </style>
+</head>
+<body>
+    <main class="card">
+        <span class="badge">✓ 服务已就绪</span>
+        <h1>情感中枢已启动</h1>
+        <p>后端服务已在本机就绪，点击下方按钮进入主界面。</p>
+        <a class="enter" href="/">进入主界面 →</a>
+        <div class="hint">若页面无法访问，请回到启动窗口查看服务状态。</div>
+    </main>
+</body>
+</html>

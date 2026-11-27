@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>家具单品预览 · 自由创意世界</title>
+<style>
+  :root {
+    --bg: #14171c;
+    --panel: #1b1f26;
+    --line: #2b3139;
+    --text: #e8e4de;
+    --muted: #8b929c;
+    --accent: #d9a441;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 14px;
+    padding: 18px 24px 12px; border-bottom: 1px solid var(--line);
+  }
+  h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .04em; }
+  header span { color: var(--muted); font-size: 12px; }
+  .grid {
+    display: grid; gap: 16px; padding: 20px 24px;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 10px 12px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .card canvas { width: 100%; height: 220px; display: block; border-radius: 6px; background: #10131a; }
+  .meta { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .name { font-size: 13px; }
+  .id { color: var(--muted); font-size: 11px; font-family: ui-monospace, Consolas, monospace; }
+  .dims { color: var(--muted); font-size: 11px; }
+  .tools { display: flex; gap: 8px; align-items: center; }
+  button {
+    background: #232932; color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  .hint { padding: 0 24px 24px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>家具单品预览</h1>
+  <span>每件单独渲染，同一套几何数据；点卡片切换 45° 视角</span>
+</header>
+<div class="tools" style="padding: 12px 24px 0;">
+  <button id="spin">全部旋转 45°</button>
+  <button id="zoom-out">缩小</button>
+  <button id="zoom-in">放大</button>
+</div>
+<div class="grid" id="grid"></div>
+<div class="hint">腿宽 0.08 格 ≈ 8 厘米的视觉比例；桌面厚 0.1 格。若某件比例不对，直接指出哪件、要改哪个尺寸。</div>
+
+<script src="/creative-models.js"></script>
+<script>
+(function () {
+  const grid = document.getElementById('grid');
+  const models = window.CREATIVE_MODELS || {};
+  const palette = window.CREATIVE_FURNITURE || [];
+  const COLOR = {};
+  palette.forEach((item) => { COLOR[item.id] = item.color; });
+  COLOR.wood = COLOR.wood || '#a97447';
+  COLOR.stone = COLOR.stone || '#8c8c8c';
+  COLOR.cloth = COLOR.cloth || '#8e3b4a';
+
+  let yaw = 45;
+  let scale = 1;
+
+  function hex2rgb(hex) {
+    const raw = String(hex || '#8c8c8c').replace('#', '');
+    const num = parseInt(raw.length === 3 ? raw.split('').map((c) => c + c).join('') : raw, 16);
+    return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+  }
+  function shade(color, k) {
+    const [r, g, b] = hex2rgb(color);
+    return 'rgb(' + Math.round(r * k) + ',' + Math.round(g * k) + ',' + Math.round(b * k) + ')';
+  }
+
+  // 同一套等距投影：x 向右下、z 向左下、y 向上
+  function makeProjector(w, h, tw) {
+    const th = tw / 2;
+    const bh = tw * 0.62;
+    const rad = (yaw * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const cx = w / 2;
+    const cy = h / 2 + 18;
+    return function project(x, y, z) {
+      const px = (x - 0.5);
+      const pz = (z - 0.5);
+      const rx = px * cos - pz * sin;
+      const rz = px * sin + pz * cos;
+      return {
+        x: cx + (rx - rz) * tw / 2,
+        y: cy + (rx + rz) * th / 2 - (y - 0.5) * bh
+      };
+    };
+  }
+
+  function drawItem(canvas, model) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    const tw = Math.min(w, h) * 0.52 * scale;
+    const project = makeProjector(w, h, tw);
+    const th = tw / 2;
+
+    // 地面：一块菱形底板 + 落影，方便判断家具有没有悬空
+    const g0 = project(0, 0, 0);
+    const g1 = project(1, 0, 0);
+    const g2 = project(1, 0, 1);
+    const g3 = project(0, 0, 1);
+    ctx.beginPath();
+    ctx.moveTo(g0.x, g0.y);
+    ctx.lineTo(g1.x, g1.y);
+    ctx.lineTo(g2.x, g2.y);
+    ctx.lineTo(g3.x, g3.y);
+    ctx.closePath();
+    ctx.fillStyle = '#171b22';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // 画家算法：先画后侧、低处，薄板最后压住腿
+    const boxes = model.boxes.slice().sort((a, b) => {
+      const ka = (a.x0 + a.z0) * 2 + a.y0;
+      const kb = (b.x0 + b.z0) * 2 + b.y0;
+      return ka - kb || a.y0 - b.y0;
+    });
+
+    boxes.forEach((b) => {
+      const color = COLOR[b.tex] || COLOR.wood;
+      const quad = (pts, k) => {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.closePath();
+        ctx.fillStyle = shade(color, k);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+      };
+      const P = project;
+      quad([P(b.x0, b.y0, b.z1), P(b.x1, b.y0, b.z1), P(b.x1, b.y1, b.z1), P(b.x0, b.y1, b.z1)], 0.58);
+      quad([P(b.x1, b.y0, b.z0), P(b.x1, b.y0, b.z1), P(b.x1, b.y1, b.z1), P(b.x1, b.y1, b.z0)], 0.78);
+      quad([P(b.x0, b.y1, b.z0), P(b.x1, b.y1, b.z0), P(b.x1, b.y1, b.z1), P(b.x0, b.y1, b.z1)], 1.0);
+    });
+
+    ctx.fillStyle = 'rgba(139,146,156,0.55)';
+    ctx.font = '11px ui-monospace, Consolas, monospace';
+    ctx.fillText(th.toFixed(0), 8, h - 8);
+  }
+
+  function renderAll() {
+    document.querySelectorAll('.card').forEach((card) => {
+      const model = models[card.dataset.id];
+      if (model) drawItem(card.querySelector('canvas'), model);
+    });
+  }
+
+  const label = {
+    table: '木桌', stool: '木凳', bar: '吧台',
+    chair_n: '椅子（靠背朝北）', chair_e: '椅子（靠背朝东）',
+    chair_s: '椅子（靠背朝南）', chair_w: '椅子（靠背朝西）'
+  };
+
+  Object.keys(models).forEach((id) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.id = id;
+    card.innerHTML =
+      '<canvas></canvas>' +
+      '<div class="meta"><span class="name">' + (label[id] || id) + '</span>' +
+      '<span class="id">' + id + '</span></div>' +
+      '<div class="dims">' + models[id].boxes.length + ' 个子块</div>';
+    card.addEventListener('click', () => { yaw = (yaw + 45) % 360; renderAll(); });
+    grid.appendChild(card);
+  });
+
+  document.getElementById('spin').addEventListener('click', () => { yaw = (yaw + 45) % 360; renderAll(); });
+  document.getElementById('zoom-in').addEventListener('click', () => { scale = Math.min(1.8, scale * 1.15); renderAll(); });
+  document.getElementById('zoom-out').addEventListener('click', () => { scale = Math.max(0.6, scale / 1.15); renderAll(); });
+  window.addEventListener('resize', renderAll);
+  renderAll();
+})();
+</script>
+</body>
+</html>

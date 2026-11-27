@@ -1,0 +1,9 @@
+{
+  "name": "gear-blank",
+  "unit": "mm",
+  "type": "gear",
+  "teeth": 18,
+  "outerRadius": 30,
+  "rootRadius": 23,
+  "depth": 10
+}

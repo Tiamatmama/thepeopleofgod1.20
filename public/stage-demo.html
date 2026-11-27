@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>舞台演示 · 满屏一句</title>
+<link rel="stylesheet" href="/stage.css" />
+<style>
+  html, body { margin: 0; height: 100%; color: #eef1ff;
+    background:
+      radial-gradient(900px 620px at 84% 6%, rgba(244, 120, 95, 0.09), transparent 62%),
+      linear-gradient(165deg, #0a0a0b 0%, #0d0d10 60%, #09090b 100%);
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  .demo { max-width: 720px; margin: 0 auto; padding: 48px 24px; }
+  h1 { font-size: 20px; font-weight: 500; margin: 0 0 6px; }
+  p { color: #8d93a8; font-size: 13px; line-height: 1.7; margin: 0 0 26px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+  button { padding: 9px 14px; border-radius: 9px; border: 1px solid #2c3040;
+    background: #14161f; color: #dfe4f7; font-size: 13px; cursor: pointer; }
+  button:hover { border-color: #5566a8; }
+  .hint { font-size: 12px; color: #636a80; line-height: 1.8; border-top: 1px solid #1c1f2a; padding-top: 16px; }
+  kbd { border: 1px solid #2c3040; border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="demo">
+  <h1>舞台演示</h1>
+  <p>这里只验证「满屏一句 + 暗影 + 角落字幕」的观感，不连后端。真实聊天页里，她的每条回复都会自动走这套。</p>
+  <div class="row">
+    <button onclick="line()">她的一句话</button>
+    <button onclick="longLine()">她的长段回复</button>
+    <button onclick="play()">连续演示</button>
+    <button onclick="PogStage.toggle()">开关舞台</button>
+  </div>
+  <div class="row">
+    <button onclick="mood('happy', .8)">开心</button>
+    <button onclick="mood('sad', .7)">低落</button>
+    <button onclick="mood('angry', .9)">生气</button>
+    <button onclick="mood('shy', .6)">害羞</button>
+    <button onclick="mood('calm', .3)">平静</button>
+  </div>
+  <div class="hint">
+    点击 / <kbd>空格</kbd> / 滚轮下一句，<kbd>←</kbd> 回看，<kbd>ESC</kbd> 收起；<br />
+    开关状态会记在浏览器里，真实聊天页沿用同一个偏好。
+  </div>
+  <!-- 演示用：模拟主界面那个输入框，让「台上直接回话」能跑通 -->
+  <input type="text" id="user-message-input" style="display:none" />
+  <!-- 演示用：模拟聊天流，舞台靠监听它来更新 -->
+  <div id="user-chat-messages" style="display:none"></div>
+</div>
+
+<script src="/stage.js"></script>
+<script>
+  const NAME = '小助手';
+
+  // 演示用：真实页面里这是主界面的发送函数；这里模拟 1.2 秒后
+  // 往聊天流里追加一条她的回复，让舞台走和真实页面一样的监听路径
+  window.sendUserMessage = function () {
+    setTimeout(() => {
+      document.getElementById('user-chat-messages').innerHTML +=
+        '<div class="chat-msg"><div class="chat-line"><span class="chat-name">小助手:</span><span class="chat-text">嗯，我听到了。</span></div></div>';
+    }, 1200);
+  };
+
+  function line() {
+    PogStage.meLine('今天有点累，不太想说话。');
+    PogStage.herLine('那我陪你坐着，不说话也行。', NAME);
+  }
+
+  function longLine() {
+    PogStage.meLine('你以后还会走吗？');
+    PogStage.herLine('不知道。别问了。\n我今天把窗户擦了一遍，擦到一半就不想动了，坐在那儿看了很久楼下的车。你上次说你怕安静，我其实觉得安静挺好的，就是有点空。', NAME);
+  }
+
+  function play() {
+    PogStage.meLine('在吗？');
+    PogStage.herLine('在。', NAME);
+    setTimeout(() => PogStage.herLine('你今天话很少。', NAME), 2600);
+    setTimeout(() => PogStage.herLine('……过来一点。', NAME), 5200);
+  }
+
+  function mood(type, intensity) {
+    PogStage.setEmotion({ type, intensity });
+  }
+</script>
+</body>
+</html>

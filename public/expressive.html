@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>表达学习平台</title>
+<style>
+  :root {
+    --bg: #14161b;
+    --panel: #1c1f27;
+    --panel-2: #232734;
+    --line: #303646;
+    --text: #e6e8ee;
+    --muted: #9aa3b5;
+    --accent: #7aa2ff;
+    --ok: #5fd08a;
+    --no: #ff8d8d;
+    --warn: #f0c86a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 20px 60px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: 1px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  .panel h2 { font-size: 14px; margin: 0 0 12px; color: var(--accent); font-weight: 600; }
+  .stats { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 10px; }
+  .stat .num { font-size: 22px; font-weight: 600; }
+  .stat .label { font-size: 12px; color: var(--muted); }
+  .agreement-line { font-size: 13px; color: var(--muted); }
+  .agreement-line b { color: var(--text); font-weight: 500; }
+  textarea, input, select {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 13px;
+    outline: none;
+  }
+  textarea:focus, input:focus, select:focus { border-color: var(--accent); }
+  textarea { min-height: 110px; resize: vertical; margin-bottom: 10px; }
+  .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+  .field { flex: 1; min-width: 120px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  button {
+    background: var(--accent);
+    border: 0;
+    border-radius: 6px;
+    color: #0f1320;
+    padding: 8px 16px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  button.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); font-weight: 400; }
+  .msg { font-size: 12px; margin-top: 8px; min-height: 18px; color: var(--muted); }
+  .msg.error { color: var(--no); }
+  .msg.ok { color: var(--ok); }
+  .filters { display: flex; gap: 8px; margin-bottom: 12px; }
+  .filters button { padding: 5px 12px; font-weight: 400; }
+  .filters button.on { background: var(--accent); color: #0f1320; font-weight: 600; }
+  .note {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    background: var(--panel-2);
+  }
+  .note.accepted { border-left-color: var(--ok); }
+  .note.rejected { border-left-color: var(--no); }
+  .note.pending { border-left-color: #e0b45c; }
+  .note .head { font-size: 12px; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+  .badge { font-size: 11px; padding: 1px 7px; border-radius: 10px; }
+  .badge.accepted { background: rgba(95,208,138,.15); color: var(--ok); }
+  .badge.rejected { background: rgba(255,141,141,.15); color: var(--no); }
+  .badge.pending { background: rgba(224,180,92,.15); color: #e0b45c; }
+  .excerpt { font-size: 14px; margin: 6px 0 4px; }
+  .insight { font-size: 13px; color: #cbd2e0; }
+  .reason { font-size: 12px; color: var(--no); margin-top: 4px; }
+  .scenes { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>表达学习平台</h1>
+  <div class="sub">她自己在学习时间读语料、判断像不像自己，审核通过的说法只作对话参考。</div>
+
+  <div class="panel">
+    <h2>学习状态</h2>
+    <div class="stats">
+      <div class="stat"><div class="num" id="countAccepted">0</div><div class="label">已接受</div></div>
+      <div class="stat"><div class="num" id="countRejected">0</div><div class="label">已拒绝</div></div>
+      <div class="stat"><div class="num" id="countTotal">0</div><div class="label">笔记总数</div></div>
+      <div class="stat"><div class="num" id="cursor">0</div><div class="label">语料游标</div></div>
+    </div>
+    <div class="agreement-line" id="agreementLine">当前约定：未约定</div>
+    <div class="msg" id="stateMsg"></div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>投放语料</h2>
+      <textarea id="corpusText" placeholder="一行一条口语语料，例如：&#10;我才没有生气呢，你别乱猜。&#10;行吧行吧，都听你的。"></textarea>
+      <button id="appendBtn">追加语料</button>
+      <div class="msg" id="corpusMsg"></div>
+    </div>
+
+    <div class="panel">
+      <h2>学一批</h2>
+      <div class="row">
+        <div class="field" style="max-width:140px">
+          <label>每批条数</label>
+          <input type="number" id="learnBatchSize" value="20" min="1" max="200">
+        </div>
+        <button id="learnBtn">学一批</button>
+      </div>
+      <div class="msg" id="learnMsg"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>学习约定</h2>
+    <div class="row">
+      <div class="field" style="max-width:140px">
+        <label>时间 HH:mm</label>
+        <input type="time" id="agreeWhen" value="21:00">
+      </div>
+      <div class="field" style="max-width:130px">
+        <label>星期（可选）</label>
+        <select id="agreeWeekday">
+          <option value="">不限</option>
+          <option value="0">周日</option>
+          <option value="1">周一</option>
+          <option value="2">周二</option>
+          <option value="3">周三</option>
+          <option value="4">周四</option>
+          <option value="5">周五</option>
+          <option value="6">周六</option>
+        </select>
+      </div>
+      <div class="field" style="max-width:120px">
+        <label>每批条数</label>
+        <input type="number" id="agreeBatchSize" value="20" min="1" max="200">
+      </div>
+      <div class="field" style="max-width:130px">
+        <label>发起方</label>
+        <select id="agreeBy">
+          <option value="user">用户</option>
+          <option value="role">角色</option>
+        </select>
+      </div>
+      <div class="field" style="min-width:180px">
+        <label>备注</label>
+        <input type="text" id="agreeNote" placeholder="例如：睡前那会儿" maxlength="200">
+      </div>
+      <button id="agreeBtn">保存约定</button>
+    </div>
+    <div class="msg" id="agreeMsg"></div>
+  </div>
+
+  <div class="panel">
+    <h2>学习笔记</h2>
+    <div class="filters">
+      <button class="ghost on" data-filter="all">全部</button>
+      <button class="ghost" data-filter="accepted">已接受</button>
+      <button class="ghost" data-filter="rejected">已拒绝</button>
+    </div>
+    <div id="noteList"><div class="empty">还没有笔记，先投放语料再学一批。</div></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var state = null;
+  var filter = 'all';
+  var lastBusy = false;
+
+  function $(id) { return document.getElementById(id); }
+
+  function setMsg(el, text, kind) {
+    el.textContent = text || '';
+    el.className = 'msg' + (kind ? ' ' + kind : '');
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return '';
+    var date = new Date(iso);
+    if (isNaN(date.getTime())) return String(iso);
+    return date.toLocaleString('zh-CN', { hour12: false });
+  }
+
+  function fmtCreated(value) {
+    if (!value) return '';
+    var date = new Date(value);
+    return isNaN(date.getTime()) ? '' : date.toLocaleString('zh-CN', { hour12: false });
+  }
+
+  function weekdayName(value) {
+    var names = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    return names[Number(value)] || '';
+  }
+
+  function renderAgreement(config) {
+    var agree = config && config.agreement;
+    if (!agree) {
+      $('agreementLine').textContent = '当前约定：未约定';
+      return;
+    }
+    var parts = [];
+    parts.push(agree.when || '--:--');
+    if (agree.weekday !== null && agree.weekday !== undefined) parts.push(weekdayName(agree.weekday));
+    parts.push('每批 ' + (agree.batchSize || '-') + ' 条');
+    if (agree.note) parts.push(agree.note);
+    parts.push(agree.proposedBy === 'role' ? '她发起' : '用户发起');
+    if (agree.confirmedAt) parts.push('确认于 ' + fmtTime(agree.confirmedAt));
+    $('agreementLine').innerHTML = '当前约定：<b>' + escapeHtml(parts.join(' · ')) + '</b>';
+  }
+
+  function escapeHtml(text) {
+    return String(text == null ? '' : text)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function renderNotes(notes) {
+    var list = $('noteList');
+    var filtered = (notes || []).filter(function (note) {
+      return filter === 'all' || note.verdict === filter;
+    });
+    if (filtered.length === 0) {
+      list.innerHTML = '<div class="empty">没有符合条件的笔记。</div>';
+      return;
+    }
+    list.innerHTML = filtered.map(function (note) {
+      var verdict = note.verdict === 'accepted' ? 'accepted'
+        : (note.verdict === 'pending' ? 'pending' : 'rejected');
+      var label = verdict === 'accepted' ? '已接受' : (verdict === 'pending' ? '待审' : '已拒绝');
+      var scenes = Array.isArray(note.scenes) && note.scenes.length
+        ? '<div class="scenes">适用：' + escapeHtml(note.scenes.join(' / ')) + '</div>' : '';
+      var reason = verdict === 'rejected' && note.reason
+        ? '<div class="reason">理由：' + escapeHtml(note.reason) + '</div>' : '';
+      return '<div class="note ' + verdict + '">'
+        + '<div class="head"><span class="badge ' + verdict + '">'
+        + label + '</span>'
+        + '<span>' + escapeHtml(fmtCreated(note.createdAt)) + '</span></div>'
+        + '<div class="excerpt">“' + escapeHtml(note.excerpt) + '”</div>'
+        + '<div class="insight">她的理解：' + escapeHtml(note.insight || '（未写）') + '</div>'
+        + scenes + reason + '</div>';
+    }).join('');
+  }
+
+  function render(data) {
+    state = data;
+    lastBusy = !!data.busy;
+    $('countAccepted').textContent = data.counts ? data.counts.accepted : 0;
+    $('countRejected').textContent = data.counts ? data.counts.rejected : 0;
+    $('countTotal').textContent = data.counts ? data.counts.total : 0;
+    $('cursor').textContent = data.cursor || 0;
+    renderAgreement(data.config);
+    renderNotes(data.notes);
+    $('learnBtn').disabled = lastBusy;
+    $('learnBtn').textContent = lastBusy ? '学习中…' : '学一批';
+    if (lastBusy) {
+      setMsg($('learnMsg'), '她正在读这一批语料…');
+    } else if (data.lastError) {
+      setMsg($('learnMsg'), '上次学习失败：' + data.lastError.message, 'error');
+      data.lastError = null;
+    }
+    setMsg($('stateMsg'), lastBusy ? '学习中' : '');
+  }
+
+  function loadState() {
+    return fetch('/api/expressive/state')
+      .then(function (res) { return res.json(); })
+      .then(render)
+      .catch(function () { setMsg($('stateMsg'), '状态读取失败', 'error'); });
+  }
+
+  $('appendBtn').addEventListener('click', function () {
+    var text = $('corpusText').value;
+    if (!text.trim()) { setMsg($('corpusMsg'), '语料不能为空', 'error'); return; }
+    $('appendBtn').disabled = true;
+    fetch('/api/expressive/corpus', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text })
+    }).then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) throw new Error(data.error);
+        setMsg($('corpusMsg'), '已追加 ' + data.added + ' 行语料', 'ok');
+        $('corpusText').value = '';
+        loadState();
+      })
+      .catch(function (error) { setMsg($('corpusMsg'), '追加失败：' + error.message, 'error'); })
+      .then(function () { $('appendBtn').disabled = false; });
+  });
+
+  $('learnBtn').addEventListener('click', function () {
+    var batchSize = Number($('learnBatchSize').value) || 20;
+    $('learnBtn').disabled = true;
+    setMsg($('learnMsg'), '已叫她开始学这一批…');
+    fetch('/api/expressive/learn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batchSize: batchSize })
+    }).then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) throw new Error(data.error);
+        setMsg($('learnMsg'), '她开始学了，稍等片刻…', 'ok');
+        loadState();
+      })
+      .catch(function (error) {
+        setMsg($('learnMsg'), '启动失败：' + error.message, 'error');
+        $('learnBtn').disabled = false;
+      });
+  });
+
+  $('agreeBtn').addEventListener('click', function () {
+    var when = $('agreeWhen').value;
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(when)) {
+      setMsg($('agreeMsg'), '时间要填 HH:mm', 'error');
+      return;
+    }
+    var weekday = $('agreeWeekday').value;
+    var payload = {
+      when: when,
+      weekday: weekday === '' ? null : Number(weekday),
+      batchSize: Number($('agreeBatchSize').value) || 20,
+      note: $('agreeNote').value,
+      proposedBy: $('agreeBy').value
+    };
+    $('agreeBtn').disabled = true;
+    fetch('/api/expressive/agreement', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) throw new Error(data.error);
+        setMsg($('agreeMsg'), '约定已保存', 'ok');
+        renderAgreement(data);
+      })
+      .catch(function (error) { setMsg($('agreeMsg'), '保存失败：' + error.message, 'error'); })
+      .then(function () { $('agreeBtn').disabled = false; });
+  });
+
+  document.querySelectorAll('.filters button').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      filter = btn.dataset.filter;
+      document.querySelectorAll('.filters button').forEach(function (other) {
+        other.classList.toggle('on', other === btn);
+      });
+      if (state) renderNotes(state.notes);
+    });
+  });
+
+  loadState();
+  setInterval(loadState, 3000);
+})();
+</script>
+</body>
+</html>

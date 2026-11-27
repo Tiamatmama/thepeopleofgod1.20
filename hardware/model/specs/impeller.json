@@ -1,0 +1,12 @@
+{
+  "name": "impeller-hollow",
+  "unit": "mm",
+  "type": "impeller",
+  "outerRadius": 45,
+  "hubRadius": 16,
+  "height": 28,
+  "bladeCount": 8,
+  "bladeThickness": 3,
+  "boreRadius": 8,
+  "cell": 1.8
+}

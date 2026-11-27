@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>小助手 · 直播皮套</title>
+<style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+    body.solid { background: #10131a; }
+    #stage { position: fixed; inset: 0; }
+    #tip {
+        position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        font: 14px/1.7 "Microsoft YaHei", sans-serif; color: #fff; text-align: center;
+        background: rgba(20, 22, 30, .86); padding: 18px 26px; border-radius: 12px;
+        cursor: pointer; user-select: none; max-width: 76vw;
+    }
+    #tip small { opacity: .65; }
+    #hud {
+        position: fixed; left: 16px; bottom: 16px; right: 16px;
+        font: 13px/1.6 "Microsoft YaHei", sans-serif; color: #fff; pointer-events: none;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, .9);
+    }
+    #caption { font-size: 22px; min-height: 30px; }
+    #feed { margin-top: 6px; opacity: .8; max-height: 34vh; overflow: hidden; }
+    #feed div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #feed .dm { opacity: .72; }
+    #feed .rp { color: #ffe08a; }
+    #status { position: fixed; right: 16px; top: 16px; font: 12px/1.6 monospace; color: #9fe3ff; text-align: right; text-shadow: 0 1px 3px #000; }
+    .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="status">未连接</div>
+<div id="hud">
+    <div id="caption"></div>
+    <div id="feed"></div>
+</div>
+<div id="tip">点击进入皮套窗口<br /><small>首次点击用于解锁浏览器音频；随后弹幕回复会自动开口</small></div>
+
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js"></script>
+<script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+<script>
+// 网页皮套：连上主服务的 WebSocket，收到 bili_reply 就让模型开口 + 播这一句的语音。
+// 模型文件优先用本地 public/live2d/model.model3.json，没有就退回官方示例模型。
+const MODEL_CANDIDATES = [
+    '/live2d/model.model3.json',
+    'https://cdn.jsdelivr.net/gh/guansss/pixi-live2d-display@master/test/assets/haru/haru_greeter_t03.model3.json'
+];
+
+const statusEl = document.getElementById('status');
+const captionEl = document.getElementById('caption');
+const feedEl = document.getElementById('feed');
+const tipEl = document.getElementById('tip');
+
+const state = { model: null, app: null, audio: null, ws: null, ready: false, modelUrl: '' };
+const MAX_FEED = 6;
+
+function setStatus(text) { statusEl.textContent = text; }
+function pushFeed(text, cls) {
+    const line = document.createElement('div');
+    line.className = cls;
+    line.textContent = text;
+    feedEl.appendChild(line);
+    while (feedEl.childElementCount > MAX_FEED) feedEl.removeChild(feedEl.firstChild);
+}
+
+// 依次尝试候选模型，全失败也不报错中断——没有模型时退化成纯语音播报
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`加载失败：${src}`));
+        document.head.appendChild(script);
+    });
+}
+
+async function ensureLive2DLib() {
+    if (window.PIXI && PIXI.live2d) return true;
+    const cdns = [
+        'https://cdn.jsdelivr.net/npm/@jannchie/pixi-live2d-display@0.4.0/dist/cubism4.min.js',
+        'https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js'
+    ];
+    for (const src of cdns) {
+        try {
+            await loadScript(src);
+            if (window.PIXI && PIXI.live2d) return true;
+        } catch (error) {
+            console.warn('[皮套]', error.message);
+        }
+    }
+    return false;
+}
+
+async function initModel() {
+    if (!window.PIXI) {
+        setStatus('pixi.js 未加载');
+        return;
+    }
+    state.app = new PIXI.Application({ backgroundAlpha: 0, resizeTo: window, antialias: true });
+    document.getElementById('stage').appendChild(state.app.view);
+
+    const hasLib = await ensureLive2DLib();
+    if (!hasLib) {
+        setStatus('Live2D 库未加载');
+        pushFeed('Live2D 库加载失败：仍可听到语音，模型显示已跳过', 'dm');
+        return;
+    }
+
+    for (const url of MODEL_CANDIDATES) {
+        try {
+            const model = await PIXI.live2d.Live2DModel.from(url);
+            model.anchor.set(0.5, 0.5);
+            const scale = Math.min(window.innerWidth / model.width, window.innerHeight / model.height) * 0.95;
+            model.scale.set(scale);
+            model.position.set(window.innerWidth / 2, window.innerHeight / 2);
+            state.app.stage.addChild(model);
+            model.motion('Idle').catch(() => {});
+            state.model = model;
+            state.modelUrl = url;
+            setStatus(`已加载模型\n${url.split('/').slice(-2)[0]}`);
+            console.log('[皮套] 模型已加载:', url);
+            return;
+        } catch (error) {
+            console.warn('[皮套] 模型加载失败:', url, error.message);
+        }
+    }
+    setStatus('模型未加载');
+    pushFeed('模型加载失败：把模型放到 public/live2d/model.model3.json 即可，语音播报不受影响', 'dm');
+}
+
+// 有模型走 model.speak（自带口型同步），没模型就直接播音频
+function speak(payload) {
+    const url = payload.audioUrl ? new URL(payload.audioUrl, location.origin).href : '';
+    captionEl.textContent = payload.reply || '';
+    if (!url) {
+        return;
+    }
+    if (state.model && typeof state.model.speak === 'function') {
+        state.model.speak(url).catch((error) => {
+            console.error('[皮套] 口型同步播放失败，改用普通播放:', error.message);
+            playPlain(url);
+        });
+        return;
+    }
+    playPlain(url);
+}
+
+function playPlain(url) {
+    if (state.audio) state.audio.pause();
+    state.audio = new Audio(url);
+    state.audio.play().catch((error) => console.warn('[皮套] 音频播放被拦截:', error.message));
+}
+
+function connect() {
+    const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${protocol}://${location.host}`);
+    state.ws = ws;
+
+    ws.onopen = () => setStatus(`已连接 ${location.host}`);
+    ws.onclose = () => {
+        setStatus('连接断开，3s 后重连');
+        setTimeout(connect, 3000);
+    };
+    ws.onerror = () => setStatus('连接出错');
+
+    ws.onmessage = (event) => {
+        let msg;
+        try {
+            msg = JSON.parse(event.data);
+        } catch (error) {
+            return;
+        }
+        if (!msg || typeof msg.type !== 'string' || !msg.type.startsWith('bili_')) return;
+
+        if (msg.type === 'bili_reply') {
+            pushFeed(`【回复】${msg.nickname || ''}：${msg.reply || ''}`, 'rp');
+            speak(msg);
+        } else if (msg.type === 'bili_danmaku') {
+            pushFeed(`${msg.nickname || '观众'}：${msg.text || ''}`, 'dm');
+        } else if (msg.type === 'bili_status') {
+            const source = msg.source ? `源 ${msg.source}` : '未开播';
+            setStatus(`已连接 ${location.host}\n${source}｜队列 ${msg.queueLength || 0}｜已回 ${((msg.stats || {}).replied) || 0}`);
+        }
+    };
+}
+
+// 首次点击解锁音频，再开始加载模型与连接
+tipEl.addEventListener('click', async () => {
+    tipEl.classList.add('hidden');
+    // 用一次静音播放解掉浏览器的自动播放限制
+    const unlock = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=');
+    unlock.play().catch(() => {});
+    await initModel();
+    connect();
+});
+
+// 调试热键：H 隐藏/显示字幕与弹幕，B 切换不透明背景
+window.addEventListener('keydown', (event) => {
+    const key = event.key.toLowerCase();
+    if (key === 'h') document.getElementById('hud').classList.toggle('hidden');
+    if (key === 'b') document.body.classList.toggle('solid');
+});
+</script>
+</body>
+</html>

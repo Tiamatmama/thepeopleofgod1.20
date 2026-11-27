@@ -1,0 +1,8 @@
+{
+  "old>new": 24,
+  "new>old": 16,
+  "old>old#dup": 15,
+  "old#dup>old": 25,
+  "old#dup>new": 27,
+  "new>old#dup": 13
+}

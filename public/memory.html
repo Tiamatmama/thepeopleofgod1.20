@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>情感中枢系统 - 记忆管理</title>
+<style>
+  /* 与研究平台 / 准入通道同一套深色科技风 */
+  :root {
+    --bg: #0b1120;
+    --panel: #111a2e;
+    --panel-2: #16203a;
+    --line: #23304f;
+    --text: #dbe4ff;
+    --dim: #8393bb;
+    --cyan: #38bdf8;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --purple: #a78bfa;
+    --red: #f87171;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    min-height: 100vh;
+    padding: 18px 22px 40px;
+  }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
+  header h1 { font-size: 20px; letter-spacing: 1px; }
+  header h1 span { color: var(--cyan); }
+  header .sub { color: var(--dim); font-size: 12px; }
+  header .spacer { flex: 1; }
+  a { color: var(--cyan); text-decoration: none; font-size: 12px; }
+  a:hover { text-decoration: underline; }
+  button {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 14px; font-size: 13px; cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover { border-color: var(--cyan); color: var(--cyan); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: #0e7490; border-color: #0e7490; color: #fff; }
+  button.primary:hover { background: #0891b2; color: #fff; }
+  button.sm { padding: 4px 9px; font-size: 12px; }
+  button.danger:hover { border-color: var(--red); color: var(--red); }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 16px;
+  }
+  .panel h2 {
+    font-size: 14px; color: var(--cyan); margin-bottom: 10px;
+    padding-left: 8px; border-left: 3px solid var(--cyan);
+  }
+  input[type=text], input[type=search], select {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 10px; font-size: 13px; font-family: inherit;
+  }
+  input[type=search] { width: 100%; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .row > .grow { flex: 1; min-width: 180px; }
+  .hint { color: var(--dim); font-size: 11px; line-height: 1.7; margin-top: 8px; }
+  .err { color: var(--red); font-size: 12px; margin-top: 8px; }
+  .empty { color: var(--dim); font-size: 12px; padding: 16px 0; text-align: center; }
+
+  .list { display: flex; flex-direction: column; gap: 10px; }
+  .item {
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 11px 13px;
+    transition: border-color .2s ease;
+  }
+  .item:hover { border-color: #2f4370; }
+  .item.pinned { border-color: #1c6b50; }
+  .item.archived { opacity: .72; }
+  .item .text { font-size: 13px; line-height: 1.75; word-break: break-word; white-space: pre-wrap; }
+  .item .meta {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-top: 8px; font-size: 11px; color: var(--dim);
+  }
+  .item .meta .spacer { flex: 1; }
+  .badge {
+    display: inline-block; padding: 2px 9px; border-radius: 20px;
+    font-size: 11px; border: 1px solid var(--line); color: var(--dim);
+  }
+  .badge.episodic { color: var(--cyan); border-color: #1d4f66; background: #0c2431; }
+  .badge.semantic { color: var(--purple); border-color: #4c3a7c; background: #1c1730; }
+  .badge.archived { color: var(--amber); border-color: #7a5a13; background: #2b230d; }
+  .badge.pinned { color: var(--green); border-color: #1c6b50; background: #0f2a22; }
+  .mono { font-family: Consolas, monospace; }
+  .count { color: var(--dim); font-size: 12px; margin-left: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>记忆 <span>管理</span></h1>
+  <div class="sub">只做可逆归档，不删除原文；归档前必须你点头</div>
+  <div class="spacer"></div>
+  <a href="/memory-galaxy.html">记忆星图</a>
+  <a href="/">返回主界面</a>
+</header>
+
+<div class="panel">
+  <h2>筛选</h2>
+  <div class="row">
+    <div class="grow">
+      <input type="search" id="q" placeholder="按关键词过滤记忆正文…" autocomplete="off">
+    </div>
+    <select id="tier">
+      <option value="">全部层级</option>
+      <option value="episodic">情景记忆</option>
+      <option value="semantic">语义记忆</option>
+      <option value="archived">已归档</option>
+    </select>
+    <button class="primary" id="reloadBtn">刷新</button>
+  </div>
+  <div class="hint">列表按时间倒序，最多 200 条。钉住 = 让她不容易忘；归档 = 暂时想不起，但随时可还原。</div>
+  <div class="err" id="err"></div>
+</div>
+
+<div class="panel">
+  <h2>记忆列表 <span class="count" id="count"></span></h2>
+  <div class="list" id="list"><div class="empty">加载中…</div></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var sessionId = localStorage.getItem('sessionId') || '';
+  var state = { items: [], busy: false };
+
+  var TIER_TEXT = { episodic: '情景', semantic: '语义', archived: '已归档' };
+
+  function $(id) { return document.getElementById(id); }
+
+  function esc(text) {
+    return String(text == null ? '' : text).replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  }
+
+  function setErr(message) {
+    $('err').textContent = message || '';
+  }
+
+  function api(url, options) {
+    options = options || {};
+    var headers = { 'Content-Type': 'application/json' };
+    if (sessionId) headers['x-session-id'] = sessionId;
+    Object.keys(options.headers || {}).forEach(function (key) { headers[key] = options.headers[key]; });
+    return fetch(url, {
+      method: options.method || 'GET',
+      headers: headers,
+      body: options.body ? JSON.stringify(options.body) : undefined
+    }).then(function (res) {
+      if (res.status === 401) throw new Error('请先登录再回来');
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        return { status: res.status, ok: res.ok, data: data };
+      });
+    });
+  }
+
+  function fmtTime(ts) {
+    if (!ts) return '时间未知';
+    try { return new Date(ts).toLocaleString(); } catch (error) { return '时间未知'; }
+  }
+
+  function itemHtml(item) {
+    var tier = item.tier || 'episodic';
+    var archived = tier === 'archived';
+    return '<div class="item' + (item.pinned ? ' pinned' : '') + (archived ? ' archived' : '') + '">' +
+      '<div class="text">' + esc(item.text) + '</div>' +
+      '<div class="meta">' +
+        '<span class="badge ' + esc(tier) + '">' + esc(TIER_TEXT[tier] || tier) + '</span>' +
+        (item.pinned ? '<span class="badge pinned">已钉住</span>' : '') +
+        '<span class="mono">' + esc(fmtTime(item.timestamp)) + '</span>' +
+        '<span class="mono">id ' + esc(item.id) + '</span>' +
+        '<span class="spacer"></span>' +
+        (archived
+          ? '<button class="sm" data-act="restore" data-id="' + esc(item.id) + '">还原</button>'
+          : '<button class="sm" data-act="pin" data-id="' + esc(item.id) + '">' +
+              (item.pinned ? '取消钉住' : '钉住') + '</button>' +
+            '<button class="sm danger" data-act="archive" data-id="' + esc(item.id) + '">归档</button>') +
+      '</div>' +
+    '</div>';
+  }
+
+  function render() {
+    var list = $('list');
+    $('count').textContent = state.items.length ? '共 ' + state.items.length + ' 条' : '';
+    if (!state.items.length) {
+      list.innerHTML = '<div class="empty">没有符合条件的记忆</div>';
+      return;
+    }
+    list.innerHTML = state.items.map(itemHtml).join('');
+    Array.prototype.forEach.call(list.querySelectorAll('button[data-act]'), function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-id');
+        var act = btn.getAttribute('data-act');
+        if (act === 'pin') return togglePin(id);
+        if (act === 'archive') return archive(id);
+        if (act === 'restore') return restore(id);
+      });
+    });
+  }
+
+  function load() {
+    setErr('');
+    var params = new URLSearchParams();
+    var q = $('q').value.trim();
+    var tier = $('tier').value;
+    if (q) params.set('q', q);
+    if (tier) params.set('tier', tier);
+    params.set('limit', '200');
+    $('list').innerHTML = '<div class="empty">加载中…</div>';
+    api('/api/memory/list?' + params.toString()).then(function (res) {
+      if (!res.ok || !res.data.success) throw new Error(res.data.error || '读取失败');
+      state.items = res.data.items || [];
+      render();
+    }).catch(function (error) {
+      setErr(error.message);
+      $('list').innerHTML = '<div class="empty">读取失败</div>';
+    });
+  }
+
+  function findItem(id) {
+    return state.items.filter(function (item) { return String(item.id) === String(id); })[0] || null;
+  }
+
+  function withBusy(fn) {
+    if (state.busy) return;
+    state.busy = true;
+    var done = function () { state.busy = false; };
+    try { fn().then(done, done); } catch (error) { done(); setErr(error.message); }
+  }
+
+  function togglePin(id) {
+    var item = findItem(id);
+    if (!item) return;
+    var next = !item.pinned;
+    withBusy(function () {
+      return api('/api/memory/' + encodeURIComponent(id) + '/pin', {
+        method: 'POST',
+        body: { pinned: next }
+      }).then(function (res) {
+        if (!res.ok || !res.data.success) throw new Error(res.data.error || '操作失败');
+        item.pinned = next;
+        render();
+      }).catch(function (error) { setErr(error.message); });
+    });
+  }
+
+  // 同意闸门：先不带 confirm 请求；服务端返回 409 + needsConfirm 后，用户确认再带 confirm:true
+  function archive(id) {
+    withBusy(function () {
+      return api('/api/memory/' + encodeURIComponent(id) + '/archive', {
+        method: 'POST',
+        body: {}
+      }).then(function (res) {
+        if (res.status === 409 && res.data.needsConfirm) {
+          if (!window.confirm('归档会让她暂时想不起这条记忆，但原文不会删除，随时可以还原。\n\n确定归档吗？')) return null;
+          return api('/api/memory/' + encodeURIComponent(id) + '/archive', {
+            method: 'POST',
+            body: { confirm: true }
+          });
+        }
+        return res;
+      }).then(function (res) {
+        if (!res) return;
+        if (!res.ok || !res.data.success) throw new Error(res.data.error || '归档失败');
+        var item = findItem(id);
+        if (item) {
+          // 记住归档前层级，本次会话内还原回原层级（刷新后按服务端默认 episodic 还原）
+          item.previousTier = res.data.previousTier || item.tier;
+          item.tier = 'archived';
+        }
+        render();
+      }).catch(function (error) { setErr(error.message); });
+    });
+  }
+
+  function restore(id) {
+    var item = findItem(id);
+    withBusy(function () {
+      return api('/api/memory/' + encodeURIComponent(id) + '/restore', {
+        method: 'POST',
+        body: { tier: (item && item.previousTier) || 'episodic' }
+      }).then(function (res) {
+        if (!res.ok || !res.data.success) throw new Error(res.data.error || '还原失败');
+        var item = findItem(id);
+        if (item) item.tier = res.data.tier || 'episodic';
+        render();
+      }).catch(function (error) { setErr(error.message); });
+    });
+  }
+
+  var timer = null;
+  $('q').addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(load, 250);
+  });
+  $('tier').addEventListener('change', load);
+  $('reloadBtn').addEventListener('click', load);
+
+  if (!sessionId) {
+    setErr('未登录：请先在主界面登录');
+    $('list').innerHTML = '<div class="empty">未登录</div>';
+    return;
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

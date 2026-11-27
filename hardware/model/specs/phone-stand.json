@@ -1,0 +1,11 @@
+{
+  "name": "phone-stand",
+  "unit": "mm",
+  "width": 80,
+  "depth": 60,
+  "height": 70,
+  "baseThickness": 6,
+  "backThickness": 8,
+  "lipThickness": 6,
+  "lipHeight": 18
+}

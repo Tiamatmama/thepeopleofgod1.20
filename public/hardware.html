@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>硬件建模通道</title>
+<style>
+  :root { --bg: #08080a; --panel: #111114; --line: #26262b; --text: #e8e4de; --muted: #8b8b93; --accent: #f4785f; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 20% 0%, rgba(244,120,95,.12), transparent 40%), var(--bg); color: var(--text); font: 13px/1.6 ui-monospace, Consolas, monospace; }
+  header { display: flex; align-items: baseline; gap: 16px; padding: 22px 28px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 18px; letter-spacing: .08em; }
+  #status { color: var(--muted); }
+  #status.ok { color: #67d49b; }
+  #status.bad { color: var(--accent); }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 28px 60px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 18px; }
+  input, textarea { background: #0c0c0f; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; }
+  input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  #token { width: 260px; }
+  button { background: transparent; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 14px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { border-color: var(--accent); color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 28px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+  .card b { display: block; font-size: 14px; margin-bottom: 4px; }
+  .card small { color: var(--muted); }
+  .card button { margin-top: 10px; width: 100%; }
+  h2 { font-size: 14px; letter-spacing: .06em; color: var(--muted); margin: 26px 0 10px; }
+  #spec { width: 100%; height: 150px; resize: vertical; }
+  #result { margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; white-space: pre-wrap; min-height: 64px; }
+  #result .stat { color: var(--accent); }
+  .downloads { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .hint { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>硬件建模通道</h1>
+  <span id="status">连接中…</span>
+  <span class="hint">独立进程 · 不接角色 / QQ / 沙箱</span>
+</header>
+<main>
+  <div class="row">
+    <input id="token" type="password" placeholder="可选：HARDWARE_MODEL_TOKEN" autocomplete="off">
+    <button onclick="saveToken()">保存 token</button>
+    <button onclick="refresh()">刷新</button>
+  </div>
+
+  <h2>已有模型</h2>
+  <div id="parts" class="grid"><div class="hint">正在读取…</div></div>
+
+  <h2>自定义参数</h2>
+  <textarea id="spec" spellcheck="false">{
+  "name": "my-part",
+  "unit": "mm",
+  "type": "phone-stand"
+}</textarea>
+  <div class="row" style="margin-top:10px">
+    <button class="primary" onclick="buildCustom()">构建</button>
+    <span class="hint">支持 phone-stand / gear / assembly / hydrant</span>
+  </div>
+
+  <div id="result">构建结果会显示在这里。</div>
+</main>
+<script>
+const API = 'http://localhost:41900';
+const $ = id => document.getElementById(id);
+let token = localStorage.getItem('hwToken') || '';
+$('token').value = token;
+
+function headers(extra) {
+  const base = Object.assign({}, extra || {});
+  if (token) base.authorization = 'Bearer ' + token;
+  return base;
+}
+
+async function call(path, options) {
+  const response = await fetch(API + path, Object.assign({}, options || {}, { headers: headers((options && options.headers) || {}) }));
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || ('HTTP ' + response.status));
+  return data;
+}
+
+function saveToken() {
+  token = $('token').value.trim();
+  localStorage.setItem('hwToken', token);
+  refresh();
+}
+
+async function refresh() {
+  const status = $('status');
+  try {
+    await call('/health');
+    status.textContent = '通道在线';
+    status.className = 'ok';
+    const data = await call('/v1/parts');
+    const parts = data.parts || [];
+    $('parts').innerHTML = parts.length ? '' : '<div class="hint">specs 目录为空</div>';
+    for (const part of parts) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = '<b></b><small></small>';
+      card.querySelector('b').textContent = part.name;
+      card.querySelector('small').textContent = part.type + ' · ' + part.file;
+      const button = document.createElement('button');
+      button.textContent = '构建';
+      button.onclick = () => build({ file: part.file }, button);
+      card.appendChild(button);
+      $('parts').appendChild(card);
+    }
+  } catch (error) {
+    status.textContent = '通道未启动或 token 不正确';
+    status.className = 'bad';
+    $('parts').innerHTML = '<div class="hint">先运行 npm run hw:serve 或 scripts\\windows\\start_hardware.bat</div>';
+  }
+}
+
+function buildCustom() {
+  let spec;
+  try {
+    spec = JSON.parse($('spec').value);
+  } catch (error) {
+    $('result').textContent = 'JSON 解析失败：' + error.message;
+    return;
+  }
+  build({ spec });
+}
+
+async function build(payload, button) {
+  const result = $('result');
+  result.textContent = '构建中…';
+  if (button) button.disabled = true;
+  try {
+    const data = await call('/v1/build', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    renderResult(data);
+  } catch (error) {
+    result.textContent = '构建失败：' + error.message;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+function renderResult(data) {
+  const result = $('result');
+  result.innerHTML = '';
+  const line = document.createElement('div');
+  line.innerHTML = '<b></b> <span class="stat"></span>';
+  line.querySelector('b').textContent = data.part + ' · ' + data.type;
+  line.querySelector('.stat').textContent = data.bbox.join(' × ') + ' ' + data.unit + ' · ' + data.volumeCm3 + ' cm³ · ' + data.triangles + ' 面';
+  result.appendChild(line);
+
+  const downloads = document.createElement('div');
+  downloads.className = 'downloads';
+  for (const [kind, name] of Object.entries(data.files || {})) {
+    const button = document.createElement('button');
+    button.textContent = '下载 ' + kind.toUpperCase();
+    button.onclick = () => download(name);
+    downloads.appendChild(button);
+  }
+  result.appendChild(downloads);
+}
+
+async function download(name) {
+  try {
+    const response = await fetch(API + '/v1/files/' + encodeURIComponent(name), { headers: headers() });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const blob = await response.blob();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  } catch (error) {
+    $('result').textContent = '下载失败：' + error.message;
+  }
+}
+
+refresh();
+</script>
+</body>
+</html>

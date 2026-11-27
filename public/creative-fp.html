@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>自由创意世界 · 第一人称</title>
+<style>
+  :root { --line: #2c323d; --text: #e6e9ef; --muted: #8c95a5; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #14171c; color: var(--text); overflow: hidden;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  #view { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+  .hud {
+    position: fixed; left: 14px; top: 14px; padding: 10px 12px; border-radius: 9px;
+    background: rgba(20, 23, 28, .82); border: 1px solid var(--line); font-size: 12px; line-height: 1.7;
+  }
+  .hud b { color: #cfe3c4; font-weight: 600; }
+  .hud .muted { color: var(--muted); }
+  .hud a { color: #9cc4e6; text-decoration: none; }
+  .hud a:hover { text-decoration: underline; }
+  #crosshair {
+    position: fixed; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; pointer-events: none;
+  }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(230, 233, 239, .6); }
+  #crosshair::before { left: 6px; top: 0; width: 2px; height: 14px; }
+  #crosshair::after { left: 0; top: 6px; width: 14px; height: 2px; }
+  #lockTip {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: rgba(20, 23, 28, .9); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 14px; font-size: 12px; color: var(--muted); pointer-events: none;
+  }
+  #lockTip.hide { display: none; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="crosshair"></div>
+<div class="hud">
+  <div><b>第一人称</b> <span class="muted">· 面渲染 · 24×24×12</span></div>
+  <div class="muted">WASD / 方向键移动，Shift 加速</div>
+  <div class="muted">点画面锁定鼠标转头，Q/E 键盘转向</div>
+  <div class="muted" id="perf">—</div>
+  <div><a href="/creative.html">回到俯视搭建</a></div>
+</div>
+<div id="lockTip">点一下画面锁定鼠标，开始走动</div>
+<script src="/creative-models.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const canvas = document.getElementById('view');
+  const ctx = canvas.getContext('2d');
+  const lockTip = document.getElementById('lockTip');
+  const perfEl = document.getElementById('perf');
+
+  const FOV = Math.PI / 3;
+  const EYE = 2.6;
+  const WALK_SPEED = 2.4;
+  const RUN_SPEED = 4.2;
+  const TURN_SPEED = 1.6;
+  const VIEW_DIST = 34;
+
+  const state = {
+    size: { x: 24, y: 12, z: 24 },
+    palette: [],
+    colors: {},
+    tiles: {},
+    blocks: {},
+    characters: [],
+    sprites: {},
+    cam: { x: 11.5, y: EYE, z: 15.5 },
+    yaw: Math.PI,          // 面朝北：进门即在大厅中央，正对壁炉与吧台
+    pitch: 0,
+    keys: new Set(),
+    locked: false,
+    last: 0
+  };
+
+  // 六个面：法线、四个角（单位立方体的本地坐标，顺序统一为左下→右下→右上→左上）、明暗系数、贴图朝向
+  // 贴图约定：画布的 y=0 边贴在 p0→p1 上，y 增大朝 p3；侧面的 p3 一定在上方，所以草地边缘不会倒过来
+  const FACES = [
+    { n: [0, 1, 0], kind: 'top', v: [[0, 1, 0], [1, 1, 0], [1, 1, 1], [0, 1, 1]], light: 1.00 },
+    { n: [0, -1, 0], kind: 'bottom', v: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]], light: 0.42 },
+    { n: [1, 0, 0], kind: 'side', v: [[1, 0, 1], [1, 0, 0], [1, 1, 0], [1, 1, 1]], light: 0.84 },
+    { n: [-1, 0, 0], kind: 'side', v: [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]], light: 0.68 },
+    { n: [0, 0, 1], kind: 'side', v: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], light: 0.92 },
+    { n: [0, 0, -1], kind: 'side', v: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]], light: 0.74 }
+  ];
+
+  function hexToRgb(hex) {
+    const raw = String(hex || '#8c8c8c').replace('#', '');
+    const full = raw.length === 3 ? raw.split('').map((c) => c + c).join('') : raw;
+    const num = parseInt(full, 16);
+    return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+  }
+
+  function blockHash(x, y, z) {
+    // 每块 ±3% 的色彩抖动，打散大面积同色，看起来像有材质
+    const h = ((x * 73856093) ^ (y * 19349663) ^ (z * 83492791)) >>> 0;
+    return 0.94 + (h % 13) / 100;
+  }
+
+  // ---- 程序化贴图：每类方块生成 16×16 的顶/侧/底三张，全部在内存里画，不加载任何图片 ----
+  function hashString(text) {
+    let h = 2166136261;
+    for (let i = 0; i < text.length; i += 1) {
+      h ^= text.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  function rng(seed) {
+    let s = seed >>> 0;
+    return function next() {
+      s = (s + 0x6D2B79F5) >>> 0;
+      let t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function css(rgb, factor, alpha) {
+    const f = factor == null ? 1 : factor;
+    const r = Math.max(0, Math.min(255, Math.round(rgb[0] * f)));
+    const g = Math.max(0, Math.min(255, Math.round(rgb[1] * f)));
+    const b = Math.max(0, Math.min(255, Math.round(rgb[2] * f)));
+    return alpha == null ? 'rgb(' + r + ',' + g + ',' + b + ')' : 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  }
+
+  const TILE = 32;
+
+  function makeTile(seed, paint, base) {
+    const c = document.createElement('canvas');
+    c.width = TILE;
+    c.height = TILE;
+    const g = c.getContext('2d');
+    // 图案仍按 16 格画，放大到 32 后再逐像素铺一层细颗粒，近看不是放大的马赛克
+    g.scale(TILE / 16, TILE / 16);
+    g.fillStyle = css(base);
+    g.fillRect(0, 0, 16, 16);
+    paint(g, rng(seed), base);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    const img = g.getImageData(0, 0, TILE, TILE);
+    const data = img.data;
+    let n = seed >>> 0;
+    for (let i = 0; i < data.length; i += 4) {
+      n = (Math.imul(n, 1664525) + 1013904223) >>> 0;
+      const f = 0.96 + ((n >>> 24) % 9) / 100;
+      data[i] = Math.max(0, Math.min(255, data[i] * f));
+      data[i + 1] = Math.max(0, Math.min(255, data[i + 1] * f));
+      data[i + 2] = Math.max(0, Math.min(255, data[i + 2] * f));
+    }
+    g.putImageData(img, 0, 0);
+    return c;
+  }
+
+  // 基础噪点：整块打散，避免纯色
+  function speckle(g, rand, base, count, spread, alpha) {
+    for (let i = 0; i < count; i += 1) {
+      const x = Math.floor(rand() * 16);
+      const y = Math.floor(rand() * 16);
+      const f = 1 + (rand() * 2 - 1) * spread;
+      g.fillStyle = css(base, f, alpha == null ? 1 : alpha);
+      g.fillRect(x, y, 1, 1);
+    }
+  }
+
+  const TEX_PAINT = {
+    grass: {
+      top: (g, rand, base) => {
+        speckle(g, rand, base, 90, 0.22);
+        for (let i = 0; i < 12; i += 1) {
+          g.fillStyle = css(base, 1.25);
+          g.fillRect(Math.floor(rand() * 16), Math.floor(rand() * 16), 1, 1);
+        }
+      },
+      side: (g, rand) => {
+        const dirt = [104, 74, 46];
+        g.fillStyle = css(dirt);
+        g.fillRect(0, 0, 16, 16);
+        speckle(g, rand, dirt, 110, 0.24);
+        // 贴图下缘（对应世界里的上方）留一条参差的草
+        for (let x = 0; x < 16; x += 1) {
+          const h = 12 + Math.floor(rand() * 4);
+          g.fillStyle = css([106, 168, 79], 0.9 + rand() * 0.3);
+          g.fillRect(x, h, 1, 16 - h);
+        }
+      },
+      bottom: (g, rand) => {
+        const dirt = [104, 74, 46];
+        g.fillStyle = css(dirt);
+        g.fillRect(0, 0, 16, 16);
+        speckle(g, rand, dirt, 120, 0.25);
+      }
+    },
+    soil: {
+      top: (g, rand, base) => speckle(g, rand, base, 140, 0.28),
+      side: (g, rand, base) => speckle(g, rand, base, 140, 0.28),
+      bottom: (g, rand, base) => speckle(g, rand, base, 140, 0.28)
+    },
+    stone: {
+      top: (g, rand, base) => {
+        speckle(g, rand, base, 120, 0.22);
+        for (let i = 0; i < 3; i += 1) {
+          g.fillStyle = css(base, 0.78);
+          g.fillRect(Math.floor(rand() * 12), Math.floor(rand() * 12), 2 + Math.floor(rand() * 3), 1);
+        }
+      },
+      side: (g, rand, base) => {
+        speckle(g, rand, base, 130, 0.24);
+        g.fillStyle = css(base, 0.8);
+        g.fillRect(3, 6, 4, 1);
+        g.fillRect(9, 11, 5, 1);
+      },
+      bottom: (g, rand, base) => speckle(g, rand, base, 120, 0.22)
+    },
+    water: {
+      top: (g, rand, base) => {
+        speckle(g, rand, base, 40, 0.12);
+        for (let y = 2; y < 16; y += 5) {
+          g.fillStyle = css(base, 1.3, 0.55);
+          g.fillRect(0, y, 16, 1);
+        }
+      },
+      side: (g, rand, base) => {
+        speckle(g, rand, base, 40, 0.12);
+        for (let y = 1; y < 16; y += 4) {
+          g.fillStyle = css(base, 1.25, 0.5);
+          g.fillRect(0, y, 16, 1);
+        }
+      },
+      bottom: (g, rand, base) => speckle(g, rand, base, 40, 0.12)
+    },
+    wood: {
+      top: (g, rand, base) => {
+        speckle(g, rand, base, 50, 0.12);
+        g.strokeStyle = css(base, 0.72);
+        g.lineWidth = 1;
+        [4, 7, 10].forEach((r) => {
+          g.strokeRect(8 - r / 2, 8 - r / 2, r, r);
+        });
+      },
+      side: (g, rand, base) => {
+        speckle(g, rand, base, 60, 0.16);
+        // 木板横向接缝 + 竖向木纹
+        g.fillStyle = css(base, 0.62);
+        g.fillRect(0, 5, 16, 1);
+        g.fillRect(0, 11, 16, 1);
+        for (let i = 0; i < 9; i += 1) {
+          const x = Math.floor(rand() * 16);
+          const y = Math.floor(rand() * 16);
+          g.fillStyle = css(base, 0.85 + rand() * 0.2);
+          g.fillRect(x, y, 1, 2 + Math.floor(rand() * 3));
+        }
+      },
+      bottom: (g, rand, base) => speckle(g, rand, base, 70, 0.18)
+    },
+    cloth: (() => {
+      const weave = (g, rand, base) => {
+        speckle(g, rand, base, 130, 0.16);
+        g.fillStyle = css(base, 0.8, 0.65);
+        for (let i = 0; i < 16; i += 2) {
+          g.fillRect(i, 0, 1, 16);
+          g.fillRect(0, i, 16, 1);
+        }
+        for (let i = 0; i < 10; i += 1) {
+          g.fillStyle = css(base, 1.24, 0.45);
+          g.fillRect(Math.floor(rand() * 15), Math.floor(rand() * 15), 2, 1);
+        }
+      };
+      return { top: weave, side: weave, bottom: weave };
+    })(),
+    food: (() => {
+      const bake = (g, rand, base) => {
+        speckle(g, rand, base, 90, 0.2);
+        // 焦边：四周一圈深一号
+        g.fillStyle = css(base, 0.72, 0.75);
+        g.fillRect(0, 0, 16, 2);
+        g.fillRect(0, 14, 16, 2);
+        g.fillRect(0, 0, 2, 16);
+        g.fillRect(14, 0, 2, 16);
+        for (let i = 0; i < 7; i += 1) {
+          g.fillStyle = css(base, 1.3, 0.5);
+          g.fillRect(3 + Math.floor(rand() * 9), 3 + Math.floor(rand() * 9), 2, 1);
+        }
+      };
+      return { top: bake, side: bake, bottom: bake };
+    })(),
+    coin: (() => {
+      const bake = (g, rand, base) => {
+        g.fillStyle = css(base, 0.82, 1);
+        g.fillRect(0, 0, 16, 16);
+        // 币面压印：外圈暗、内圈亮、中心再亮一档
+        g.fillStyle = css(base, 1.16, 1);
+        g.fillRect(3, 3, 10, 10);
+        g.fillStyle = css(base, 0.72, 1);
+        g.fillRect(4, 4, 8, 8);
+        g.fillStyle = css(base, 1.32, 1);
+        g.fillRect(6, 6, 4, 4);
+        for (let i = 0; i < 6; i += 1) {
+          g.fillStyle = css(base, 1.4, 0.55);
+          g.fillRect(1 + Math.floor(rand() * 14), 1 + Math.floor(rand() * 14), 1, 1);
+        }
+      };
+      return { top: bake, side: bake, bottom: bake };
+    })(),
+    leaf: {
+      top: (g, rand, base) => {
+        speckle(g, rand, base, 150, 0.3);
+        for (let i = 0; i < 10; i += 1) {
+          g.fillStyle = css(base, 0.55, 0.85);
+          g.fillRect(Math.floor(rand() * 16), Math.floor(rand() * 16), 1, 1);
+        }
+      },
+      side: (g, rand, base) => {
+        speckle(g, rand, base, 150, 0.32);
+        for (let i = 0; i < 12; i += 1) {
+          g.fillStyle = css(base, 0.5, 0.9);
+          g.fillRect(Math.floor(rand() * 16), Math.floor(rand() * 16), 1, 1);
+        }
+      },
+      bottom: (g, rand, base) => speckle(g, rand, base, 120, 0.25)
+    },
+    sand: {
+      top: (g, rand, base) => speckle(g, rand, base, 160, 0.16),
+      side: (g, rand, base) => speckle(g, rand, base, 120, 0.14),
+      bottom: (g, rand, base) => speckle(g, rand, base, 120, 0.14)
+    },
+    brick: (() => {
+      const draw = (g, rand, base) => {
+        const mortar = [150, 146, 132];
+        g.fillStyle = css(mortar);
+        g.fillRect(0, 0, 16, 16);
+        for (let row = 0; row < 4; row += 1) {
+          const y = row * 4;
+          const offset = row % 2 === 0 ? 0 : 2;
+          for (let bx = -4; bx < 16; bx += 8) {
+            g.fillStyle = css(base, 0.86 + rand() * 0.28);
+            g.fillRect(bx + offset + 1, y + 1, 6, 2);
+          }
+        }
+      };
+      return { top: draw, side: draw, bottom: draw };
+    })()
+  };
+
+  function buildTiles() {
+    const tiles = {};
+    state.palette.forEach((item) => {
+      const paint = TEX_PAINT[item.id] || TEX_PAINT.stone;
+      const base = hexToRgb(item.color);
+      const seed = hashString(item.id);
+      tiles[item.id] = {
+        top: makeTile(seed + 11, paint.top, base),
+        side: makeTile(seed + 23, paint.side, base),
+        bottom: makeTile(seed + 37, paint.bottom, base)
+      };
+    });
+    return tiles;
+  }
+
+  function has(x, y, z) {
+    return Boolean(state.blocks[x + ',' + y + ',' + z]);
+  }
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(window.innerWidth * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function cameraBasis() {
+    const cy = Math.cos(state.yaw);
+    const sy = Math.sin(state.yaw);
+    const cp = Math.cos(state.pitch);
+    const sp = Math.sin(state.pitch);
+    return {
+      fx: sy, fz: cy,          // 前向（水平分量）
+      rx: -cy, rz: sy,         // 右向
+      cp, sp
+    };
+  }
+
+  // 世界坐标 -> 相机空间 -> 屏幕
+  function project(wx, wy, wz, W, H, focal, basis) {
+    const dx = wx - state.cam.x;
+    const dy = wy - state.cam.y;
+    const dz = wz - state.cam.z;
+    const depth = dx * basis.fx + dz * basis.fz;
+    const right = dx * basis.rx + dz * basis.rz;
+    const y2 = dy * basis.cp - depth * basis.sp;
+    const z2 = depth * basis.cp + dy * basis.sp;
+    if (z2 <= 0.06) return null;
+    return { x: W / 2 + right * focal / z2, y: H / 2 - y2 * focal / z2, z: z2 };
+  }
+
+  function drawSkyAndGround(W, H, focal, basis) {
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, '#1a2130');
+    sky.addColorStop(0.55, '#2b3547');
+    sky.addColorStop(1, '#3a4354');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    const horizon = H / 2 + focal * Math.tan(state.pitch);
+    if (horizon < H) {
+      const ground = ctx.createLinearGradient(0, horizon, 0, H);
+      ground.addColorStop(0, '#242a33');
+      ground.addColorStop(1, '#31373f');
+      ctx.fillStyle = ground;
+      ctx.fillRect(0, horizon, W, H - horizon);
+
+      // 地面网格，给空旷处一点尺度感
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, horizon, W, H - horizon);
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(130, 150, 175, 0.09)';
+      ctx.lineWidth = 1;
+      const bx = Math.round(state.cam.x);
+      const bz = Math.round(state.cam.z);
+      for (let k = -16; k <= 16; k += 1) {
+        const z = bz + k;
+        const a = project(bx - 16, 0, z, W, H, focal, basis);
+        const b = project(bx + 16, 0, z, W, H, focal, basis);
+        if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+        const x = bx + k;
+        const c = project(x, 0, bz - 16, W, H, focal, basis);
+        const d = project(x, 0, bz + 16, W, H, focal, basis);
+        if (c && d) { ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.stroke(); }
+      }
+      ctx.restore();
+    }
+  }
+
+  // 人物小像：12×28 的像素小人，一张面向镜头的卡片
+  function charSprite(ch) {
+    const key = ch.id + '|' + ch.skin + '|' + ch.cloth;
+    if (state.sprites[key]) return state.sprites[key];
+    const c = document.createElement('canvas');
+    c.width = 12;
+    c.height = 28;
+    const g = c.getContext('2d');
+    const px = (x, y, w, h, color) => { g.fillStyle = color; g.fillRect(x, y, w, h); };
+    px(4, 1, 5, 6, ch.skin);
+    px(5, 3, 1, 1, '#2b2b2b');
+    px(7, 3, 1, 1, '#2b2b2b');
+    px(4, 7, 5, 1, ch.skin);
+    px(3, 8, 7, 9, ch.cloth);
+    px(2, 8, 1, 7, ch.cloth);
+    px(10, 8, 1, 7, ch.cloth);
+    px(2, 15, 1, 2, ch.skin);
+    px(10, 15, 1, 2, ch.skin);
+    px(4, 17, 2, 9, '#3a3f4a');
+    px(7, 17, 2, 9, '#3a3f4a');
+    px(3, 26, 3, 2, '#22252b');
+    px(7, 26, 3, 2, '#22252b');
+    state.sprites[key] = c;
+    return c;
+  }
+
+  function render() {
+    const t0 = performance.now();
+    const W = canvas.width / (window.devicePixelRatio || 1);
+    const H = canvas.height / (window.devicePixelRatio || 1);
+    const focal = (H / 2) / Math.tan(FOV / 2);
+    const basis = cameraBasis();
+
+    drawSkyAndGround(W, H, focal, basis);
+
+    const faces = [];
+    const { fx, fz, rx, rz } = basis;
+    const camX = state.cam.x;
+    const camY = state.cam.y;
+    const camZ = state.cam.z;
+
+    Object.keys(state.blocks).forEach((key) => {
+      const parts = key.split(',');
+      const x = Number(parts[0]);
+      const y = Number(parts[1]);
+      const z = Number(parts[2]);
+
+      // 粗筛：距离太远、或整体在相机背后的方块直接跳过
+      const vx = x + 0.5 - camX;
+      const vz = z + 0.5 - camZ;
+      const depth = vx * fx + vz * fz;
+      if (depth < -1.5 || Math.abs(depth) > VIEW_DIST) return;
+      const lateral = vx * rx + vz * rz;
+      if (Math.abs(lateral) > Math.abs(depth) * 2.2 + 3) return;
+
+      const id = state.blocks[key];
+      const tint = blockHash(x, y, z);
+      // 家具类方块走几何层：一个格子里是若干子盒子（桌面薄板、桌腿、椅背…）
+      const model = window.CREATIVE_MODELS && window.CREATIVE_MODELS[id];
+      const boxes = model ? model.boxes : [{ x0: 0, y0: 0, z0: 0, x1: 1, y1: 1, z1: 1 }];
+
+      boxes.forEach((b) => {
+        const mat = b.tex || id;
+        const rgb = state.colors[mat];
+        if (!rgb) return;
+        const bx = b.x1 - b.x0;
+        const by = b.y1 - b.y0;
+        const bz = b.z1 - b.z0;
+
+        for (let i = 0; i < FACES.length; i += 1) {
+          const face = FACES[i];
+          const nx = face.n[0];
+          const ny = face.n[1];
+          const nz = face.n[2];
+          // 盒子正好贴在格子边界时，才看相邻格子有没有方块挡着；盒子内部的缝隙不剔除
+          if (nx > 0 && b.x1 > 0.999 && has(x + 1, y, z)) continue;
+          if (nx < 0 && b.x0 < 0.001 && has(x - 1, y, z)) continue;
+          if (ny > 0 && b.y1 > 0.999 && has(x, y + 1, z)) continue;
+          if (ny < 0 && b.y0 < 0.001 && has(x, y - 1, z)) continue;
+          if (nz > 0 && b.z1 > 0.999 && has(x, y, z + 1)) continue;
+          if (nz < 0 && b.z0 < 0.001 && has(x, y, z - 1)) continue;
+          // 背面剔除：法线要朝向相机
+          const cxw = x + (b.x0 + b.x1) / 2 + nx * (bx / 2);
+          const cyw = y + (b.y0 + b.y1) / 2 + ny * (by / 2);
+          const czw = z + (b.z0 + b.z1) / 2 + nz * (bz / 2);
+          const toCam = (camX - cxw) * nx + (camY - cyw) * ny + (camZ - czw) * nz;
+          if (toCam <= 0) continue;
+
+          let ok = true;
+          const pts = [];
+          for (let v = 0; v < 4; v += 1) {
+            const vert = face.v[v];
+            const p = project(
+              x + b.x0 + vert[0] * bx,
+              y + b.y0 + vert[1] * by,
+              z + b.z0 + vert[2] * bz,
+              W, H, focal, basis
+            );
+            if (!p) { ok = false; break; }
+            pts.push(p);
+          }
+          if (!ok) continue;
+
+          const dist = Math.hypot(cxw - camX, cyw - camY, czw - camZ);
+          const fog = Math.max(0.30, 1 - dist / (VIEW_DIST * 1.15));
+          const k = face.light * fog * tint;
+          const tiles = state.tiles[mat];
+          // 面积太小的面贴图看不清，直接铺平均色省一次贴图变换
+          const area = Math.abs(
+            (pts[0].x * pts[1].y - pts[1].x * pts[0].y) +
+            (pts[1].x * pts[2].y - pts[2].x * pts[1].y) +
+            (pts[2].x * pts[3].y - pts[3].x * pts[2].y) +
+            (pts[3].x * pts[0].y - pts[0].x * pts[3].y)
+          ) / 2;
+          faces.push({
+            pts,
+            dist,
+            area,
+            tile: tiles ? tiles[face.kind] : null,
+            fill: 'rgb(' + Math.round(rgb[0] * k) + ',' + Math.round(rgb[1] * k) + ',' + Math.round(rgb[2] * k) + ')',
+            dark: Math.max(0, Math.min(0.72, 1 - k))
+          });
+        }
+      });
+    });
+
+    // 人物：站着的其他人画成面向镜头的小卡片，交给同一个画家排序去挡
+    (state.characters || []).forEach((ch) => {
+      if (!ch || ch.id === 'you') return;
+      const base = project(ch.x, ch.y, ch.z, W, H, focal, basis);
+      const top = project(ch.x, ch.y + 1.78, ch.z, W, H, focal, basis);
+      if (!base || !top) return;
+      const halfW = 0.32 * focal / base.z;
+      const h = base.y - top.y;
+      if (h < 4) return;
+      const dist = Math.hypot(ch.x - camX, ch.y + 0.9 - camY, ch.z - camZ);
+      const fog = Math.max(0.35, 1 - dist / (VIEW_DIST * 1.15));
+      faces.push({
+        sprite: charSprite(ch),
+        fog,
+        dist,
+        area: halfW * 2 * h,
+        pts: [
+          { x: base.x - halfW, y: base.y },
+          { x: base.x + halfW, y: base.y },
+          { x: base.x + halfW, y: top.y },
+          { x: base.x - halfW, y: top.y }
+        ]
+      });
+    });
+
+    // 画家算法：远的先画
+    faces.sort((a, b) => b.dist - a.dist);
+    ctx.lineWidth = 1;
+    ctx.imageSmoothingEnabled = false;
+    for (let i = 0; i < faces.length; i += 1) {
+      const f = faces[i];
+      const p = f.pts;
+      if (f.sprite) {
+        const w = p[1].x - p[0].x;
+        const hh = p[0].y - p[2].y;
+        ctx.drawImage(f.sprite, p[0].x, p[2].y, w, hh);
+        // 深色描边：不然站在同色地毯上会糊成一片
+        ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+        ctx.lineWidth = Math.max(1, w * 0.06);
+        ctx.strokeRect(p[0].x, p[2].y, w, hh);
+        if (f.fog < 0.98) {
+          ctx.fillStyle = 'rgba(20,24,32,' + (1 - f.fog).toFixed(3) + ')';
+          ctx.fillRect(p[0].x, p[2].y, p[1].x - p[0].x, p[0].y - p[2].y);
+        }
+        continue;
+      }
+      if (f.tile && f.area > 12) {
+        drawTexturedFace(f);
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(p[0].x, p[0].y);
+        ctx.lineTo(p[1].x, p[1].y);
+        ctx.lineTo(p[2].x, p[2].y);
+        ctx.lineTo(p[3].x, p[3].y);
+        ctx.closePath();
+        ctx.fillStyle = f.fill;
+        ctx.fill();
+      }
+
+      // 明暗与雾：统一压一层黑，避免为每个亮度单独烘焙贴图
+      if (f.dark > 0.03) {
+        ctx.beginPath();
+        ctx.moveTo(p[0].x, p[0].y);
+        ctx.lineTo(p[1].x, p[1].y);
+        ctx.lineTo(p[2].x, p[2].y);
+        ctx.lineTo(p[3].x, p[3].y);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(0,0,0,' + f.dark.toFixed(3) + ')';
+        ctx.fill();
+      }
+
+      // 方块接缝
+      ctx.beginPath();
+      ctx.moveTo(p[0].x, p[0].y);
+      ctx.lineTo(p[1].x, p[1].y);
+      ctx.lineTo(p[2].x, p[2].y);
+      ctx.lineTo(p[3].x, p[3].y);
+      ctx.closePath();
+      ctx.strokeStyle = 'rgba(0,0,0,' + (0.13 * Math.max(0.2, 1 - f.dist / 22)).toFixed(3) + ')';
+      ctx.stroke();
+    }
+    state.perfFaces = faces.length;
+    state.perfMs = performance.now() - t0;
+  }
+
+  // 贴图：小面用一个四边形仿射；近处大面拆成两个三角形，各自算精确仿射，避免拉伸
+  function drawTexturedFace(f) {
+    const p = f.pts;
+    if (f.area < 90) {
+      ctx.save();
+      ctx.transform(
+        (p[1].x - p[0].x) / TILE, (p[1].y - p[0].y) / TILE,
+        (p[3].x - p[0].x) / TILE, (p[3].y - p[0].y) / TILE,
+        p[0].x, p[0].y
+      );
+      ctx.drawImage(f.tile, 0, 0);
+      ctx.restore();
+      return;
+    }
+
+    // 三角形一：p0(0,0) p1(T,0) p3(0,T)
+    paintTriangle(f.tile, p[0], p[1], p[3],
+      (p[1].x - p[0].x) / TILE, (p[1].y - p[0].y) / TILE,
+      (p[3].x - p[0].x) / TILE, (p[3].y - p[0].y) / TILE,
+      p[0].x, p[0].y);
+    // 三角形二：p1(T,0) p2(T,T) p3(0,T)
+    paintTriangle(f.tile, p[1], p[2], p[3],
+      (p[2].x - p[3].x) / TILE, (p[2].y - p[3].y) / TILE,
+      (p[2].x - p[1].x) / TILE, (p[2].y - p[1].y) / TILE,
+      p[1].x - p[2].x + p[3].x, p[1].y - p[2].y + p[3].y);
+  }
+
+  function paintTriangle(tile, a, b, c, ax, ay, cx, cy, ex, ey) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineTo(c.x, c.y);
+    ctx.closePath();
+    ctx.clip();
+    ctx.transform(ax, ay, cx, cy, ex, ey);
+    ctx.drawImage(tile, 0, 0);
+    ctx.restore();
+  }
+
+  function solidAt(x, z) {
+    if (x < 0 || z < 0 || x >= state.size.x || z >= state.size.z) return true;
+    // 铺在地上的绒布是地毯，能踩过去；其余 y=1 的方块都算墙
+    const low = state.blocks[x + ',1,' + z];
+    if (low && low !== 'cloth') return true;
+    return has(x, 2, z);
+  }
+
+  function collide(nx, nz) {
+    if (!solidAt(Math.floor(nx), Math.floor(state.cam.z))) state.cam.x = nx;
+    if (!solidAt(Math.floor(state.cam.x), Math.floor(nz))) state.cam.z = nz;
+  }
+
+  function tick(now) {
+    const dt = Math.min(0.05, (now - state.last) / 1000 || 0);
+    state.last = now;
+    const keys = state.keys;
+    const speed = (keys.has('shift') ? RUN_SPEED : WALK_SPEED) * dt;
+    let forward = 0;
+    let strafe = 0;
+    if (keys.has('w') || keys.has('arrowup')) forward += 1;
+    if (keys.has('s') || keys.has('arrowdown')) forward -= 1;
+    if (keys.has('d') || keys.has('arrowright')) strafe += 1;
+    if (keys.has('a') || keys.has('arrowleft')) strafe -= 1;
+    if (forward || strafe) {
+      const basis = cameraBasis();
+      const len = Math.hypot(forward, strafe) || 1;
+      const nx = state.cam.x + (basis.fx * forward + basis.rx * strafe) / len * speed;
+      const nz = state.cam.z + (basis.fz * forward + basis.rz * strafe) / len * speed;
+      collide(nx, nz);
+    }
+    if (keys.has('q')) state.yaw -= TURN_SPEED * dt;
+    if (keys.has('e')) state.yaw += TURN_SPEED * dt;
+    render();
+    state.perfFrames = (state.perfFrames || 0) + 1;
+    if (perfEl && now - state.perfAt > 500) {
+      const fps = Math.round(1000 * state.perfFrames / (now - state.perfAt));
+      perfEl.textContent = '渲染 ' + (Math.round((state.perfMs || 0) * 10) / 10) + ' ms · 面 ' +
+        (state.perfFaces || 0) + ' · 方块 ' + Object.keys(state.blocks).length + ' · ' + fps + ' fps';
+      state.perfAt = now;
+      state.perfFrames = 0;
+    }
+    window.requestAnimationFrame(tick);
+  }
+
+  document.addEventListener('keydown', (event) => {
+    const key = event.key.toLowerCase();
+    if (['w', 'a', 's', 'd', 'q', 'e', 'shift', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+      state.keys.add(key);
+      if (key.indexOf('arrow') === 0) event.preventDefault();
+    }
+  });
+  document.addEventListener('keyup', (event) => state.keys.delete(event.key.toLowerCase()));
+
+  canvas.addEventListener('click', () => {
+    if (!state.locked && canvas.requestPointerLock) canvas.requestPointerLock();
+  });
+  document.addEventListener('pointerlockchange', () => {
+    state.locked = document.pointerLockElement === canvas;
+    lockTip.classList.toggle('hide', state.locked);
+  });
+  document.addEventListener('mousemove', (event) => {
+    if (!state.locked) return;
+    state.yaw += event.movementX * 0.0025;
+    state.pitch = Math.max(-0.6, Math.min(0.6, state.pitch - event.movementY * 0.002));
+  });
+
+  async function load() {
+    try {
+      const res = await fetch('/api/creative/world');
+      const data = await res.json();
+      if (data && data.size) state.size = data.size;
+      if (data && data.blocks) state.blocks = data.blocks;
+      if (data && Array.isArray(data.characters)) state.characters = data.characters;
+      if (data && data.palette) {
+        state.palette = data.palette;
+        data.palette.forEach((item) => { state.colors[item.id] = hexToRgb(item.color); });
+        state.tiles = buildTiles();
+      }
+    } catch (error) {
+      ctx.fillStyle = '#14171c';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#e39b93';
+      ctx.font = '14px sans-serif';
+      ctx.fillText('世界没读出来：' + error.message, 24, 32);
+    }
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  load().then(() => {
+    state.last = performance.now();
+    state.perfAt = state.last;
+    state.perfFrames = 0;
+    window.requestAnimationFrame(tick);
+  });
+})();
+</script>
+</body>
+</html>

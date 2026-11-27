@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="情感中枢">
+  <rect width="192" height="192" rx="40" fill="#14171c"/>
+  <rect x="18" y="18" width="156" height="156" rx="28" fill="#1c2028" stroke="#3a4353" stroke-width="3"/>
+  <!-- 屋顶 -->
+  <path d="M46 86 L96 50 L146 86 Z" fill="#a44a3f"/>
+  <!-- 墙体 -->
+  <rect x="54" y="86" width="84" height="58" rx="6" fill="#a97447"/>
+  <!-- 窗（暖光） -->
+  <rect x="66" y="98" width="26" height="24" rx="4" fill="#e9c25b"/>
+  <rect x="100" y="98" width="26" height="24" rx="4" fill="#e9c25b"/>
+  <!-- 门 -->
+  <rect x="84" y="112" width="24" height="32" rx="3" fill="#2f3a2c" stroke="#e9c25b" stroke-width="3"/>
+  <!-- 灯 -->
+  <circle cx="96" cy="78" r="5" fill="#ffe9a8"/>
+</svg>

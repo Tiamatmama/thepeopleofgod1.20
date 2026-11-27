@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>自由创意世界</title>
+<style>
+  :root {
+    --bg: #14171c;
+    --panel: #1c2028;
+    --line: #2c323d;
+    --text: #e6e9ef;
+    --muted: #8c95a5;
+    --accent: #6aa84f;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    overflow: hidden;
+  }
+  #app { display: flex; flex-direction: column; height: 100%; }
+  header {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .5px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    font-size: 12px; color: var(--muted); border: 1px solid var(--line);
+    border-radius: 999px; padding: 2px 9px; white-space: nowrap;
+  }
+  .chip b { color: var(--text); font-weight: 600; }
+  .chip.skill { border-color: #34506b; color: #9cc4e6; }
+  .spacer { flex: 1; }
+  .viewbar { display: flex; gap: 6px; }
+  .viewbar button, .viewbar a {
+    background: #262c37; color: var(--text); border: 1px solid var(--line);
+    border-radius: 7px; padding: 5px 10px; font-size: 12px; cursor: pointer;
+    text-decoration: none; line-height: 1.5;
+  }
+  .viewbar button:hover, .viewbar a:hover { border-color: #46536a; }
+  .viewbar button.on { border-color: var(--accent); color: #cfe3c4; }
+  main { position: relative; flex: 1; display: flex; min-height: 0; }
+  #stage { flex: 1; position: relative; min-width: 0; }
+  canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+  .chat {
+    width: 296px; border-right: 1px solid var(--line); background: var(--panel);
+    display: flex; flex-direction: column; flex-shrink: 0; min-width: 240px;
+  }
+  .chat-head {
+    padding: 12px 14px 8px; font-size: 12px; color: var(--muted);
+    letter-spacing: .5px; border-bottom: 1px solid var(--line);
+  }
+  .messages { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .messages:empty::before { content: '跟她说说你想搭什么，她一边回话一边放方块。'; color: #5f6878; font-size: 12px; }
+  .msg {
+    font-size: 12.5px; line-height: 1.65; padding: 8px 10px; border-radius: 9px;
+    max-width: 94%; white-space: pre-wrap; word-break: break-word;
+  }
+  .msg.user { align-self: flex-end; background: #2b3a2b; border: 1px solid #3a4d36; }
+  .msg.assistant { align-self: flex-start; background: #222732; border: 1px solid var(--line); }
+  .msg.pending { color: var(--muted); font-style: italic; }
+  .composer { border-top: 1px solid var(--line); padding: 10px; display: flex; gap: 8px; }
+  .composer textarea {
+    flex: 1; resize: none; height: 46px; background: #222732; color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 9px;
+    font-size: 12.5px; font-family: inherit; line-height: 1.5;
+  }
+  .composer textarea:focus { outline: none; border-color: #46536a; }
+  .composer button {
+    background: #2f3a2c; border: 1px solid #3f5238; color: #cfe3c4;
+    border-radius: 8px; padding: 0 13px; cursor: pointer; font-size: 12.5px;
+  }
+  .composer button:hover { border-color: var(--accent); }
+  .composer button:disabled { opacity: .45; cursor: default; }
+  .panel {
+    width: 190px; border-left: 1px solid var(--line); background: var(--panel);
+    padding: 14px 12px; overflow-y: auto; flex-shrink: 0;
+  }
+  .panel h2 { font-size: 12px; color: var(--muted); margin: 0 0 10px; font-weight: 500; letter-spacing: .5px; }
+  .swatches { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .swatch {
+    display: flex; align-items: center; gap: 7px; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 7px; padding: 6px 7px;
+    background: #222732; font-size: 12px; color: var(--text);
+  }
+  .swatch:hover { border-color: #46536a; }
+  .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .swatch i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  .hint { font-size: 11.5px; color: var(--muted); line-height: 1.7; margin-top: 16px; }
+  .actions { display: flex; gap: 8px; margin-top: 16px; }
+  .actions button {
+    flex: 1; background: #262c37; color: var(--text); border: 1px solid var(--line);
+    border-radius: 7px; padding: 7px 0; font-size: 12px; cursor: pointer;
+  }
+  .actions button:hover { border-color: #46536a; }
+  .actions button.danger:hover { border-color: #a44a3f; color: #e39b93; }
+  #toast {
+    position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%);
+    background: rgba(20, 23, 28, .92); border: 1px solid var(--line); color: var(--text);
+    padding: 7px 14px; border-radius: 8px; font-size: 12px; opacity: 0;
+    transition: opacity .2s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>自由创意世界</h1>
+    <div class="chips" id="score"></div>
+    <div class="spacer"></div>
+    <div class="chips" id="skills"></div>
+    <div class="viewbar">
+      <button id="rotate" title="换一个方向看">旋转</button>
+      <button id="interior" title="藏起屋顶和最上层墙，看室内">室内</button>
+      <a href="/creative-fp.html" target="_blank" title="走进酒馆，第一人称">第一人称</a>
+    </div>
+  </header>
+  <main>
+    <aside class="chat">
+      <div class="chat-head">边聊边放</div>
+      <div class="messages" id="messages"></div>
+      <div class="composer">
+        <textarea id="chat-input" placeholder="想搭什么？Enter 发送，Shift+Enter 换行"></textarea>
+        <button id="chat-send">发送</button>
+      </div>
+    </aside>
+    <div id="stage">
+      <canvas id="world"></canvas>
+      <div id="toast"></div>
+    </div>
+    <aside class="panel">
+      <h2>方块</h2>
+      <div class="swatches" id="palette"></div>
+      <div class="hint">
+        左键：在这个格子放一块<br />
+        右键 / Shift+左键：拆掉最上面那块<br />
+        滚轮缩放，左上角可换方向、切室内视图<br />
+        <span id="layers-hint">每格最多叠 12 层</span>
+      </div>
+      <div class="actions">
+        <button id="clear" class="danger">清空</button>
+      </div>
+    </aside>
+  </main>
+</div>
+<script src="/creative-models.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const canvas = document.getElementById('world');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const skillsEl = document.getElementById('skills');
+  const paletteEl = document.getElementById('palette');
+  const toastEl = document.getElementById('toast');
+  const messagesEl = document.getElementById('messages');
+  const chatInput = document.getElementById('chat-input');
+  const chatSend = document.getElementById('chat-send');
+  // 对话历史只留在页面内存里：刷新即清空，不落盘，也不进角色会话
+  const history = [];
+  let busy = false;
+
+  const state = {
+    size: { x: 16, y: 8, z: 16 },
+    palette: [],
+    blocks: {},
+    characters: [],
+    score: { total: 0, placed: 0, layers: 0 },
+    selected: 'grass',
+    hover: null
+  };
+
+  // 等距投影参数：格子宽度随画布自适应，块高按格子宽度的 0.6 取
+  // rot：绕竖轴转 90° 的倍数；zoom：滚轮缩放；cut：剖切高度（null 表示不剖）
+  const view = { tw: 44, th: 22, bh: 26, ox: 0, oy: 0, dpr: 1, rot: 0, zoom: 1, cut: 3 };
+
+  function toast(text) {
+    toastEl.textContent = text;
+    toastEl.classList.add('show');
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => toastEl.classList.remove('show'), 1800);
+  }
+
+  function parseKey(key) {
+    const parts = String(key).split(',').map((n) => parseInt(n, 10));
+    return (parts.length === 3 && parts.every(Number.isInteger)) ? { x: parts[0], y: parts[1], z: parts[2] } : null;
+  }
+
+  function shade(hex, factor) {
+    const value = hex.replace('#', '');
+    const num = parseInt(value.length === 3
+      ? value.split('').map((c) => c + c).join('')
+      : value, 16);
+    const r = Math.round(((num >> 16) & 255) * factor);
+    const g = Math.round(((num >> 8) & 255) * factor);
+    const b = Math.round((num & 255) * factor);
+    return 'rgb(' + [r, g, b].map((n) => Math.max(0, Math.min(255, n))).join(',') + ')';
+  }
+
+  function colorOf(id) {
+    const item = state.palette.find((p) => p.id === id);
+    return item ? item.color : '#8c8c8c';
+  }
+
+  // 每列的最高层（0 表示空列），用于判断落点与拆哪一块
+  function columns() {
+    const map = new Map();
+    Object.keys(state.blocks).forEach((key) => {
+      const c = parseKey(key);
+      if (!c) return;
+      const id = c.x + ',' + c.z;
+      const cur = map.get(id);
+      if (!cur || c.y >= cur.top) map.set(id, { x: c.x, z: c.z, top: c.y + 1 });
+    });
+    return Array.from(map.values());
+  }
+
+  // 视角旋转：只在 x/z 平面上转 90° 的整数倍，方便绕着建筑换边看
+  function rotated(x, z) {
+    const n = state.size.x;
+    switch (view.rot & 3) {
+      case 1: return { x: z, z: n - 1 - x };
+      case 2: return { x: n - 1 - x, z: n - 1 - z };
+      case 3: return { x: n - 1 - z, z: x };
+      default: return { x, z };
+    }
+  }
+
+  function unrotated(x, z) {
+    const n = state.size.x;
+    switch (view.rot & 3) {
+      case 1: return { x: n - 1 - z, z: x };
+      case 2: return { x: n - 1 - x, z: n - 1 - z };
+      case 3: return { x: z, z: n - 1 - x };
+      default: return { x, z };
+    }
+  }
+
+  function project(x, y, z) {
+    const r = rotated(x, z);
+    return {
+      sx: view.ox + (r.x - r.z) * view.tw / 2,
+      sy: view.oy + (r.x + r.z) * view.th / 2 - y * view.bh
+    };
+  }
+
+  function layout() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    view.dpr = dpr;
+    canvas.width = Math.max(320, Math.floor(rect.width * dpr));
+    canvas.height = Math.max(240, Math.floor(rect.height * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const w = rect.width;
+    const h = rect.height;
+    // 横向：(x - z) 从 -(z-1) 到 (x-1)，共 x+z-1 格宽；纵向：地面 (x+z) 加最高层的块高
+    const byWidth = (w - 48) / (state.size.x + state.size.z - 1);
+    const byHeight = (h - 48) / ((state.size.x + state.size.z) / 2 + state.size.y * 0.6);
+    view.tw = Math.max(10, Math.min(56, byWidth, byHeight)) * view.zoom;
+    view.th = view.tw / 2;
+    view.bh = view.tw * 0.6;
+    view.ox = w / 2;
+    // 剖切时按可见高度留白，屋顶藏起来后地面上移，不会顶到画布外
+    const topY = view.cut == null ? state.size.y : Math.min(view.cut, state.size.y);
+    view.oy = 28 + topY * view.bh;
+  }
+
+  function diamondPath(cx, cy, rw, rh) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - rh);
+    ctx.lineTo(cx + rw, cy);
+    ctx.lineTo(cx, cy + rh);
+    ctx.lineTo(cx - rw, cy);
+    ctx.closePath();
+  }
+
+  function drawGround() {
+    const { tw, th } = view;
+    const { x: sxMax, z: szMax } = state.size;
+    for (let s = 0; s <= sxMax + szMax - 2; s += 1) {
+      for (let x = Math.max(0, s - szMax + 1); x <= Math.min(sxMax - 1, s); x += 1) {
+        const z = s - x;
+        const p = project(x, 0, z);
+        const base = (x + z) % 2 === 0 ? '#232833' : '#1e222b';
+        diamondPath(p.sx, p.sy, tw / 2, th / 2);
+        ctx.fillStyle = base;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.035)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+  }
+
+  // 家具的子盒子：按格内局部坐标画左面 / 右面 / 顶面，靠后的先画
+  function drawBox(cx, cy, cz, b) {
+    const color = colorOf(b.tex);
+    const x0 = cx + b.x0;
+    const x1 = cx + b.x1;
+    const y0 = cy + b.y0;
+    const y1 = cy + b.y1;
+    const z0 = cz + b.z0;
+    const z1 = cz + b.z1;
+    const quad = (pts, k) => {
+      ctx.beginPath();
+      ctx.moveTo(pts[0].sx, pts[0].sy);
+      for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i].sx, pts[i].sy);
+      ctx.closePath();
+      ctx.fillStyle = shade(color, k);
+      ctx.fill();
+    };
+    quad([project(x0, y0, z1), project(x1, y0, z1), project(x1, y1, z1), project(x0, y1, z1)], 0.55);
+    quad([project(x1, y0, z0), project(x1, y0, z1), project(x1, y1, z1), project(x1, y1, z0)], 0.72);
+    quad([project(x0, y1, z0), project(x1, y1, z0), project(x1, y1, z1), project(x0, y1, z1)], 1.0);
+  }
+
+  function drawBlock(c) {
+    const id = state.blocks[c.x + ',' + c.y + ',' + c.z];
+    const model = window.CREATIVE_MODELS && window.CREATIVE_MODELS[id];
+    if (model) {
+      // 低处先画、高处后画，薄板与台面自然盖住腿
+      model.boxes.slice().sort((a, b) => a.y0 - b.y0).forEach((b) => drawBox(c.x, c.y, c.z, b));
+      return;
+    }
+    const p = project(c.x, c.y, c.z);
+    const color = colorOf(state.blocks[c.x + ',' + c.y + ',' + c.z]);
+    const tw = view.tw / 2;
+    const th = view.th / 2;
+    const bh = view.bh;
+    const cy = p.sy;
+    // 左面
+    ctx.beginPath();
+    ctx.moveTo(p.sx - tw, cy);
+    ctx.lineTo(p.sx, cy + th);
+    ctx.lineTo(p.sx, cy + th - bh);
+    ctx.lineTo(p.sx - tw, cy - bh);
+    ctx.closePath();
+    ctx.fillStyle = shade(color, 0.55);
+    ctx.fill();
+    // 右面
+    ctx.beginPath();
+    ctx.moveTo(p.sx, cy + th);
+    ctx.lineTo(p.sx + tw, cy);
+    ctx.lineTo(p.sx + tw, cy - bh);
+    ctx.lineTo(p.sx, cy + th - bh);
+    ctx.closePath();
+    ctx.fillStyle = shade(color, 0.72);
+    ctx.fill();
+    // 顶面：相邻格子做明暗交插，正好是「几个颜色交替」
+    diamondPath(p.sx, cy - bh, tw, th);
+    const light = (c.x + c.z) % 2 === 0 ? 1.0 : 0.92;
+    ctx.fillStyle = shade(color, light);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  function drawHover() {
+    if (!state.hover) return;
+    const { x, z, top } = state.hover;
+    const y = Math.min(top, state.size.y - 1);
+    const p = project(x, y, z);
+    diamondPath(p.sx, p.sy - view.bh, view.tw / 2, view.th / 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // 半透明预览块
+    ctx.globalAlpha = 0.34;
+    drawBlock({ x, y: top >= state.size.y ? state.size.y - 1 : top, z });
+    ctx.globalAlpha = 1;
+  }
+
+  function render() {
+    const w = canvas.width / view.dpr;
+    const h = canvas.height / view.dpr;
+    ctx.clearRect(0, 0, w, h);
+    drawGround();
+    // 剖切：只画低于 cut 的层，屋顶与最上层墙被藏起来，能从上方看进室内
+    const list = Object.keys(state.blocks)
+      .map((key) => parseKey(key))
+      .filter((cell) => cell && (view.cut == null || cell.y < view.cut));
+    // 画家算法：按旋转后的前后关系，远的先画，同列由低到高
+    list.sort((a, b) => {
+      const ra = rotated(a.x, a.z);
+      const rb = rotated(b.x, b.z);
+      return (ra.x + ra.z) - (rb.x + rb.z) || a.y - b.y;
+    });
+    list.forEach(drawBlock);
+    (state.characters || []).forEach(drawCharacter);
+    drawHover();
+  }
+
+  // 人物：一格高的小人，腿 / 衣 / 头三段，脚下带一片影子，头顶写名字
+  function drawCharacter(ch) {
+    const p = project(ch.x - 0.5, ch.y, ch.z - 0.5);
+    const w = view.tw * 0.24;
+    const unit = view.bh;
+    const band = (dy, h, color) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(p.sx - w, p.sy - dy - h, w * 2, h);
+    };
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    diamondPath(p.sx, p.sy, w * 1.4, w * 0.7);
+    ctx.fill();
+    band(0, unit * 0.75, shade(ch.cloth, 0.42));
+    band(unit * 0.75, unit * 0.95, ch.cloth);
+    band(unit * 1.7, unit * 0.7, ch.skin);
+    ctx.fillStyle = 'rgba(255,255,255,0.78)';
+    ctx.font = '11px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(ch.name || ch.id, p.sx, p.sy - unit * 2.6);
+
+    // 台词气泡：说出来 10 秒内显示，过时自动不画
+    if (ch.say && Date.now() - (ch.sayAt || 0) < 120000) {
+      ctx.font = '12px system-ui, -apple-system, sans-serif';
+      const bw = Math.ceil(ctx.measureText(ch.say).width) + 16;
+      const bh = 20;
+      const viewW = canvas.width / (window.devicePixelRatio || 1);
+      const bx = Math.min(Math.max(p.sx - bw / 2, 4), Math.max(4, viewW - bw - 4));
+      const by = Math.max(p.sy - unit * 2.6 - 12 - bh, 28);
+      ctx.fillStyle = 'rgba(246,244,238,0.96)';
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx, by, bw, bh);
+      // 小尖角
+      ctx.beginPath();
+      ctx.moveTo(p.sx - 4, by + bh);
+      ctx.lineTo(p.sx + 4, by + bh);
+      ctx.lineTo(p.sx, by + bh + 6);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(246,244,238,0.96)';
+      ctx.fill();
+      ctx.fillStyle = '#23262c';
+      ctx.fillText(ch.say, p.sx, by + 14);
+    }
+  }
+
+  function refreshScore() {
+    const s = state.score || {};
+    scoreEl.innerHTML =
+      '<span class="chip">评分 <b>' + (s.total || 0) + '</b></span>' +
+      '<span class="chip">方块 <b>' + (s.placed || 0) + '</b></span>' +
+      '<span class="chip">层数 <b>' + (s.layers || 0) + '</b></span>' +
+      '<span class="chip">对称 <b>' + Math.round((s.symmetry || 0) * 100) + '%</b></span>' +
+      (state.characters || []).map((ch) => '<span class="chip">' + (ch.name || ch.id) +
+        (ch.action ? ' · ' + ch.action : '') +
+        ' 金币 <b>' + (ch.wallet || 0) + '</b></span>').join('');
+  }
+
+  function renderPalette() {
+    paletteEl.innerHTML = '';
+    state.palette.forEach((item) => {
+      const el = document.createElement('div');
+      el.className = 'swatch' + (item.id === state.selected ? ' active' : '');
+      el.innerHTML = '<i style="background:' + item.color + '"></i><span>' + item.name + '</span>';
+      el.addEventListener('click', () => {
+        state.selected = item.id;
+        renderPalette();
+      });
+      paletteEl.appendChild(el);
+    });
+  }
+
+  function applyWorld(world) {
+    if (!world) return;
+    state.size = world.size || state.size;
+    state.palette = world.palette || state.palette;
+    state.blocks = world.blocks || {};
+    state.characters = world.characters || [];
+    state.score = world.score || state.score;
+    if (!state.palette.some((p) => p.id === state.selected)) {
+      state.selected = state.palette[0] ? state.palette[0].id : 'grass';
+    }
+    const hint = document.getElementById('layers-hint');
+    if (hint) hint.textContent = '每格最多叠 ' + state.size.y + ' 层';
+    layout();
+    renderPalette();
+    refreshScore();
+    render();
+  }
+
+  function pointInDiamond(px, py, cx, cy) {
+    return Math.abs(px - cx) / (view.tw / 2) + Math.abs(py - cy) / (view.th / 2) <= 1;
+  }
+
+  // 拾取：先看各列顶面（按旋转后的前后序），再看地面；比直接反投影更贴合「点到哪就放哪」的直觉
+  function pick(px, py) {
+    const cols = columns().sort((a, b) => {
+      const ra = rotated(a.x, a.z);
+      const rb = rotated(b.x, b.z);
+      return (rb.x + rb.z) - (ra.x + ra.z) || b.top - a.top;
+    });
+    for (const c of cols) {
+      const y = Math.max(0, c.top - 1);
+      const p = project(c.x, y, c.z);
+      if (pointInDiamond(px, py, p.sx, p.sy - view.bh)) {
+        return { x: c.x, z: c.z, top: c.top };
+      }
+    }
+    // 地面是旋转后的坐标系，算完要转回世界坐标
+    const u = (px - view.ox) / (view.tw / 2);
+    const v = (py - view.oy) / (view.th / 2);
+    const back = unrotated(Math.round((u + v) / 2), Math.round((v - u) / 2));
+    if (back.x < 0 || back.z < 0 || back.x >= state.size.x || back.z >= state.size.z) return null;
+    const hit = cols.find((c) => c.x === back.x && c.z === back.z);
+    return { x: back.x, z: back.z, top: hit ? hit.top : 0 };
+  }
+
+  async function api(path, body) {
+    const options = body === undefined
+      ? {}
+      : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+    const res = await fetch(path, options);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) {
+      throw new Error(data.message || data.error || ('HTTP ' + res.status));
+    }
+    return data;
+  }
+
+  async function place(cell) {
+    if (cell.top >= state.size.y) {
+      toast('这一列已经到顶了');
+      return;
+    }
+    if (view.cut != null && cell.top >= view.cut) {
+      toast('这层在室内视图里被剖掉了，先关掉「室内」再往上叠');
+      return;
+    }
+    const data = await api('/api/creative/place', {
+      x: cell.x, y: cell.top, z: cell.z, block: state.selected
+    });
+    applyWorld(data.world);
+  }
+
+  async function remove(cell) {
+    if (!cell.top) {
+      toast('这里没有方块');
+      return;
+    }
+    if (view.cut != null && cell.top - 1 >= view.cut) {
+      toast('这一层被剖切藏起来了，先关掉「室内」再拆');
+      return;
+    }
+    const data = await api('/api/creative/remove', { x: cell.x, y: cell.top - 1, z: cell.z });
+    applyWorld(data.world);
+  }
+
+  function handleMove(event) {
+    const rect = canvas.getBoundingClientRect();
+    const cell = pick(event.clientX - rect.left, event.clientY - rect.top);
+    const changed = (cell && !state.hover) || (!cell && state.hover) ||
+      (cell && state.hover && (cell.x !== state.hover.x || cell.z !== state.hover.z || cell.top !== state.hover.top));
+    state.hover = cell;
+    if (changed) render();
+  }
+
+  async function handleClick(event) {
+    const rect = canvas.getBoundingClientRect();
+    const cell = pick(event.clientX - rect.left, event.clientY - rect.top);
+    if (!cell) return;
+    const isRemove = event.button === 2 || event.shiftKey;
+    try {
+      if (isRemove) await remove(cell);
+      else await place(cell);
+    } catch (error) {
+      toast(error.message);
+    }
+  }
+
+  async function loadWorld() {
+    try {
+      applyWorld(await api('/api/creative/world'));
+    } catch (error) {
+      toast('世界没读出来：' + error.message);
+    }
+  }
+
+  async function loadContext() {
+    try {
+      const data = await api('/api/creative/context');
+      const skills = data.skills || [];
+      skillsEl.innerHTML = skills.length
+        ? skills.map((s) => '<span class="chip skill" title="' + s.description + '">' + s.name + '</span>').join('')
+        : '<span class="chip">未装配技能</span>';
+    } catch {
+      skillsEl.innerHTML = '';
+    }
+  }
+
+  canvas.addEventListener('mousemove', handleMove);
+  canvas.addEventListener('mouseleave', () => { state.hover = null; render(); });
+  canvas.addEventListener('mousedown', (event) => { event.preventDefault(); handleClick(event); });
+  canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+  window.addEventListener('resize', () => { layout(); render(); });
+
+  canvas.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    view.zoom = Math.max(0.5, Math.min(1.8, view.zoom * (event.deltaY > 0 ? 0.9 : 1.1)));
+    layout();
+    render();
+  }, { passive: false });
+
+  const rotateBtn = document.getElementById('rotate');
+  const interiorBtn = document.getElementById('interior');
+  rotateBtn.addEventListener('click', () => {
+    view.rot = (view.rot + 1) % 4;
+    state.hover = null;
+    layout();
+    render();
+  });
+  interiorBtn.addEventListener('click', () => {
+    view.cut = view.cut == null ? 3 : null;
+    interiorBtn.classList.toggle('on', view.cut != null);
+    state.hover = null;
+    layout();
+    render();
+  });
+  interiorBtn.classList.toggle('on', view.cut != null);
+
+  document.getElementById('clear').addEventListener('click', async () => {
+    if (!window.confirm('确定清空整个世界？')) return;
+    try {
+      const data = await api('/api/creative/clear', {});
+      applyWorld(data.world);
+      toast('已清空');
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+
+  function appendMessage(role, text, pending) {
+    const el = document.createElement('div');
+    el.className = 'msg ' + role + (pending ? ' pending' : '');
+    el.textContent = text;
+    messagesEl.appendChild(el);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return el;
+  }
+
+  function setBusy(next) {
+    busy = next;
+    chatSend.disabled = next;
+    chatSend.textContent = next ? '搭着…' : '发送';
+  }
+
+  async function sendChat() {
+    const text = chatInput.value.trim();
+    if (!text || busy) return;
+    chatInput.value = '';
+    appendMessage('user', text);
+    // 只在发送时截取最近 16 条，页面这边保留完整记录
+    const payloadHistory = history.slice(-16);
+    setBusy(true);
+    const pendingEl = appendMessage('assistant', '正在动手……', true);
+    try {
+      const data = await api('/api/creative/chat', { message: text, history: payloadHistory });
+      pendingEl.remove();
+      appendMessage('assistant', data.reply || '（没说话）');
+      history.push({ role: 'user', content: text });
+      history.push({ role: 'assistant', content: data.reply || '' });
+      if (data.world) applyWorld(data.world);
+    } catch (error) {
+      pendingEl.remove();
+      appendMessage('assistant', '（没接上：' + error.message + '）');
+    } finally {
+      setBusy(false);
+      chatInput.focus();
+    }
+  }
+
+  chatSend.addEventListener('click', sendChat);
+  chatInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      sendChat();
+    }
+  });
+
+  loadWorld();
+  loadContext();
+  // 轮询角色台词与位置：气泡只有 10 秒寿命，别人改了状态也能及时看到
+  setInterval(loadWorld, 3000);
+})();
+</script>
+</body>
+</html>

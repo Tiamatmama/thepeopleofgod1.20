@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>中转站 · Relay</title>
+<style>
+  :root {
+    --bg: #0f1218;
+    --panel: #171b23;
+    --panel-2: #1e232d;
+    --line: #2a3140;
+    --text: #e6e9ef;
+    --muted: #8b93a3;
+    --accent: #5b9dff;
+    --ok: #3ecf8e;
+    --bad: #ff6b6b;
+    --warn: #f0b429;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px; border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; background: rgba(15,18,24,.92); backdrop-filter: blur(8px);
+    z-index: 5;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  .badge {
+    font-size: 12px; padding: 2px 8px; border-radius: 99px;
+    border: 1px solid var(--line); color: var(--muted);
+  }
+  .badge.on { color: var(--ok); border-color: rgba(62,207,142,.4); }
+  .badge.off { color: var(--bad); border-color: rgba(255,107,107,.4); }
+  main { max-width: 1180px; margin: 0 auto; padding: 20px; display: grid; gap: 18px; }
+  section {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px;
+  }
+  section h2 { font-size: 14px; margin: 0 0 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  section h2 small { color: var(--muted); font-weight: 400; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; white-space: nowrap; }
+  input[type=text], input[type=password], input[type=number], textarea, select {
+    width: 100%; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font: inherit;
+  }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 72px; }
+  button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 12px; font: inherit; cursor: pointer; white-space: nowrap;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #08111f; font-weight: 600; }
+  button.danger { color: var(--bad); }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .grow { flex: 1; min-width: 180px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .mono { font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; }
+  .pill { font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); }
+  .pill.ok { color: var(--ok); border-color: rgba(62,207,142,.4); }
+  .pill.bad { color: var(--bad); border-color: rgba(255,107,107,.4); }
+  .pill.warn { color: var(--warn); border-color: rgba(240,180,41,.4); }
+  .list { display: grid; gap: 8px; max-height: 320px; overflow: auto; }
+  .item { background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; }
+  .item .meta { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .item pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: inherit; color: var(--text); }
+  .endpoint { background: var(--panel-2); border: 1px dashed var(--line); border-radius: 9px; padding: 10px 12px; }
+  .toast {
+    position: fixed; right: 20px; bottom: 20px; background: var(--panel-2);
+    border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 10px 14px; max-width: 420px; opacity: 0;
+    transform: translateY(8px); transition: all .2s; pointer-events: none; z-index: 20;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.err { border-left-color: var(--bad); }
+  .empty { color: var(--muted); font-size: 13px; padding: 10px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>中转站 · Relay</h1>
+  <span id="status-badge" class="badge">加载中</span>
+  <span class="grow"></span>
+  <span class="muted mono" id="origin"></span>
+</header>
+
+<main>
+  <section>
+    <h2>对外入口 <small>把客户端的 baseURL 指到这里</small></h2>
+    <div class="endpoint">
+      <div class="row">
+        <span class="muted" style="width:76px">OpenAI</span>
+        <span class="mono grow" id="openai-endpoint"></span>
+        <button data-copy="openai-endpoint">复制</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span class="muted" style="width:76px">Anthropic</span>
+        <span class="mono grow" id="anthropic-endpoint"></span>
+        <button data-copy="anthropic-endpoint">复制</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <span class="muted" style="width:76px">访问令牌</span>
+        <input id="auth-token" class="grow" type="password" placeholder="必填：留空则所有外部工具调用都会被拒绝">
+        <button id="save-token-btn">保存令牌</button>
+      </div>
+      <div class="muted" style="margin-top:8px">客户端没有令牌输入框时，把上面的地址直接填进它的 API 地址/Base URL；模型名填 <span class="mono">auto</span> 即可按通道优先级自动选。</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>通道 <small>按优先级从上到下尝试，失败自动换下一个</small></h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:52px">启用</th>
+          <th style="width:110px">名称</th>
+          <th style="width:150px">模型</th>
+          <th>接口地址</th>
+          <th style="width:190px">密钥</th>
+          <th style="width:70px">优先级</th>
+          <th style="width:150px">状态</th>
+          <th style="width:86px">操作</th>
+        </tr>
+      </thead>
+      <tbody id="channels-body"></tbody>
+    </table>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" id="save-config-btn">保存配置</button>
+      <span class="muted">密钥框里显示的是掩码，原样保存不会覆盖真实密钥；清空并保存则保留原值，要删除请填 <span class="mono">null</span>。</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>信箱 <small>Agent 之间互发消息，落 data/relay/messages.jsonl</small></h2>
+    <div class="row">
+      <input id="msg-from" class="grow" type="text" placeholder="发件人，如 user" value="user">
+      <input id="msg-to" class="grow" type="text" placeholder="收件人，如 deepseek 或 all" value="all">
+      <button class="primary" id="send-msg-btn" style="width:100px">发送</button>
+    </div>
+    <textarea id="msg-content" style="margin-top:10px" placeholder="消息内容"></textarea>
+    <div class="list" id="messages" style="margin-top:12px"></div>
+  </section>
+
+  <section>
+    <h2>任务队列 <small>后台跑，可取消；结果留在下方</small></h2>
+    <div class="row">
+      <select id="task-model" style="width:180px"></select>
+      <input id="task-title" class="grow" type="text" placeholder="任务标题（可空）">
+      <button class="primary" id="create-task-btn" style="width:100px">排队</button>
+    </div>
+    <textarea id="task-prompt" style="margin-top:10px" placeholder="要它做什么"></textarea>
+    <div class="list" id="tasks" style="margin-top:12px"></div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  const sessionId = localStorage.getItem('sessionId') || '';
+  const headers = () => {
+    const h = { 'Content-Type': 'application/json' };
+    if (sessionId) h['x-session-id'] = sessionId;
+    return h;
+  };
+
+  let config = null;
+  let status = null;
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (value) => String(value == null ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const time = (ts) => ts ? new Date(ts).toLocaleString('zh-CN', { hour12: false }) : '';
+
+  let toastTimer = null;
+  function toast(text, isError) {
+    const el = $('toast');
+    el.textContent = text;
+    el.classList.toggle('err', Boolean(isError));
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 3600);
+  }
+
+  async function api(path, options) {
+    const response = await fetch(path, Object.assign({ headers: headers() }, options || {}));
+    if (response.status === 401) {
+      throw new Error('请先登录：打开 /login.html 登录后再回来');
+    }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.success === false) {
+      throw new Error(data.message || `请求失败（HTTP ${response.status}）`);
+    }
+    return data;
+  }
+
+  function renderEndpoints() {
+    const origin = location.origin;
+    $('origin').textContent = origin;
+    $('openai-endpoint').textContent = `${origin}/relay/v1`;
+    $('anthropic-endpoint').textContent = `${origin}/relay/v1`;
+  }
+
+  function channelStateHtml(channel) {
+    const stat = (status && status.channels || []).find((item) => item.id === channel.id) || {};
+    let state = '<span class="pill warn">未启用</span>';
+    if (channel.enabled && channel.hasKey) {
+      state = stat.lastError
+        ? `<span class="pill bad" title="${esc(stat.lastError)}">最近失败</span>`
+        : '<span class="pill ok">可用</span>';
+    } else if (channel.enabled && !channel.hasKey) {
+      state = '<span class="pill warn">缺密钥</span>';
+    }
+    const statText = stat.lastUsedAt
+      ? `${stat.ok || 0} 成功 / ${stat.fail || 0} 失败 · ${stat.lastLatencyMs || 0}ms`
+      : '尚未调用';
+    return `<div>${state}</div><div class="muted">${esc(statText)}</div>`;
+  }
+
+  function renderChannels() {
+    const body = $('channels-body');
+    if (!config) return;
+    body.innerHTML = config.channels.map((channel) => `<tr data-channel="${esc(channel.id)}">
+        <td><input type="checkbox" class="ch-enabled" ${channel.enabled ? 'checked' : ''}></td>
+        <td><input type="text" class="ch-label" value="${esc(channel.label)}"></td>
+        <td><input type="text" class="ch-model mono" value="${esc(channel.model)}"></td>
+        <td><input type="text" class="ch-endpoint mono" value="${esc(channel.endpoint)}"></td>
+        <td><input type="text" class="ch-key" value="${esc(channel.apiKey)}" placeholder="粘贴密钥"></td>
+        <td><input type="number" class="ch-priority" value="${esc(channel.priority)}"></td>
+        <td class="ch-state">${channelStateHtml(channel)}</td>
+        <td><button class="ch-test" data-id="${esc(channel.id)}">测试</button></td>
+      </tr>`).join('');
+  }
+
+  // 轮询只刷新状态列，避免每 4 秒重建输入框把正在填的密钥冲掉
+  function updateChannelStates() {
+    if (!config) return;
+    config.channels.forEach((channel) => {
+      const row = document.querySelector(`#channels-body tr[data-channel="${CSS.escape(channel.id)}"]`);
+      const cell = row && row.querySelector('.ch-state');
+      if (cell) cell.innerHTML = channelStateHtml(channel);
+    });
+  }
+
+  function collectChannels() {
+    return Array.from(document.querySelectorAll('#channels-body tr')).map((row) => ({
+      id: row.dataset.channel,
+      enabled: row.querySelector('.ch-enabled').checked,
+      label: row.querySelector('.ch-label').value.trim(),
+      model: row.querySelector('.ch-model').value.trim(),
+      endpoint: row.querySelector('.ch-endpoint').value.trim(),
+      apiKey: row.querySelector('.ch-key').value.trim(),
+      priority: Number(row.querySelector('.ch-priority').value) || 100
+    }));
+  }
+
+  function renderMessages(messages) {
+    const list = $('messages');
+    if (!messages.length) {
+      list.innerHTML = '<div class="empty">还没有消息</div>';
+      return;
+    }
+    list.innerHTML = messages.slice().reverse().map((message) => `<div class="item">
+      <div class="meta">
+        <span class="mono">${esc(message.from)} → ${esc(message.to)}</span>
+        <span>${time(message.timestamp)}</span>
+      </div>
+      <pre>${esc(message.content)}</pre>
+    </div>`).join('');
+  }
+
+  function renderTasks(tasks) {
+    const list = $('tasks');
+    if (!tasks.length) {
+      list.innerHTML = '<div class="empty">还没有任务</div>';
+      return;
+    }
+    const colors = { queued: 'warn', running: 'warn', done: 'ok', failed: 'bad', cancelled: 'bad' };
+    list.innerHTML = tasks.map((task) => {
+      const pill = `<span class="pill ${colors[task.status] || ''}">${esc(task.status)}</span>`;
+      const canCancel = task.status === 'queued' || task.status === 'running';
+      const body = task.result || task.error || '';
+      return `<div class="item">
+        <div class="meta">
+          ${pill}
+          <span class="mono">${esc(task.model)}</span>
+          ${task.channel ? `<span class="mono">→ ${esc(task.channel)}</span>` : ''}
+          <span>${time(task.createdAt)}</span>
+          <span class="grow"></span>
+          ${canCancel ? `<button class="task-cancel danger" data-id="${esc(task.id)}">取消</button>` : ''}
+        </div>
+        <div><strong>${esc(task.title)}</strong></div>
+        ${body ? `<pre style="margin-top:6px">${esc(body.slice(0, 1200))}</pre>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  function renderModels() {
+    const select = $('task-model');
+    const previous = select.value;
+    const ids = ['auto'].concat((config && config.channels || []).filter((channel) => channel.enabled).map((channel) => channel.id));
+    select.innerHTML = ids.map((id) => `<option value="${esc(id)}">${esc(id)}</option>`).join('');
+    if (ids.includes(previous)) select.value = previous;
+  }
+
+  async function refreshStatus() {
+    try {
+      const data = await api('/api/relay/status');
+      status = data.status;
+      const badge = $('status-badge');
+      const usable = (status.channels || []).filter((channel) => channel.enabled && channel.hasKey).length;
+      badge.textContent = status.enabled ? `运行中 · ${usable} 个可用通道` : '已关闭';
+      badge.className = `badge ${status.enabled ? 'on' : 'off'}`;
+      updateChannelStates();
+    } catch (error) {
+      const badge = $('status-badge');
+      badge.textContent = error.message;
+      badge.className = 'badge off';
+    }
+  }
+
+  async function refreshConfig() {
+    const data = await api('/api/relay/config');
+    config = data.config;
+    $('auth-token').value = config.authToken || '';
+    renderModels();
+    renderChannels();
+    await refreshStatus();
+  }
+
+  async function refreshLists() {
+    try {
+      const [messages, tasks] = await Promise.all([
+        api('/api/relay/messages?limit=30'),
+        api('/api/relay/tasks?limit=30')
+      ]);
+      renderMessages(messages.messages || []);
+      renderTasks(tasks.tasks || []);
+    } catch (error) {
+      // 轮询失败不打扰，下一轮再试
+    }
+  }
+
+  document.addEventListener('click', async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    if (target.dataset.copy) {
+      const text = $(target.dataset.copy).textContent;
+      navigator.clipboard.writeText(text).then(() => toast('已复制')).catch(() => toast('复制失败', true));
+      return;
+    }
+
+    if (target.classList.contains('ch-test')) {
+      const id = target.dataset.id;
+      target.disabled = true;
+      target.textContent = '测试中';
+      try {
+        const data = await api('/api/relay/test', {
+          method: 'POST',
+          body: JSON.stringify({ channel: id, prompt: '只回复两个字：收到' })
+        });
+        toast(`${id}：${data.latencyMs}ms · ${String(data.text || '').slice(0, 60)}`);
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        target.disabled = false;
+        target.textContent = '测试';
+        refreshStatus();
+      }
+      return;
+    }
+
+    if (target.classList.contains('task-cancel')) {
+      try {
+        await api(`/api/relay/tasks/${encodeURIComponent(target.dataset.id)}/cancel`, { method: 'POST' });
+        refreshLists();
+      } catch (error) {
+        toast(error.message, true);
+      }
+      return;
+    }
+  });
+
+  $('save-config-btn').addEventListener('click', async () => {
+    const button = $('save-config-btn');
+    button.disabled = true;
+    try {
+      const data = await api('/api/relay/config', {
+        method: 'PUT',
+        body: JSON.stringify({ channels: collectChannels() })
+      });
+      config = data.config;
+      renderModels();
+      renderChannels();
+      toast('配置已保存');
+      await refreshStatus();
+    } catch (error) {
+      toast(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('save-token-btn').addEventListener('click', async () => {
+    try {
+      const data = await api('/api/relay/config', {
+        method: 'PUT',
+        body: JSON.stringify({ authToken: $('auth-token').value.trim() })
+      });
+      config = data.config;
+      toast('访问令牌已保存');
+    } catch (error) {
+      toast(error.message, true);
+    }
+  });
+
+  $('send-msg-btn').addEventListener('click', async () => {
+    try {
+      await api('/api/relay/messages', {
+        method: 'POST',
+        body: JSON.stringify({
+          from: $('msg-from').value.trim() || 'user',
+          to: $('msg-to').value.trim() || 'all',
+          content: $('msg-content').value.trim()
+        })
+      });
+      $('msg-content').value = '';
+      refreshLists();
+    } catch (error) {
+      toast(error.message, true);
+    }
+  });
+
+  $('create-task-btn').addEventListener('click', async () => {
+    try {
+      await api('/api/relay/tasks', {
+        method: 'POST',
+        body: JSON.stringify({
+          prompt: $('task-prompt').value.trim(),
+          title: $('task-title').value.trim(),
+          model: $('task-model').value
+        })
+      });
+      $('task-prompt').value = '';
+      $('task-title').value = '';
+      toast('已入队');
+      refreshLists();
+    } catch (error) {
+      toast(error.message, true);
+    }
+  });
+
+  renderEndpoints();
+  refreshConfig().then(refreshLists).catch((error) => {
+    toast(error.message, true);
+    $('status-badge').textContent = '未登录或服务未启动';
+    $('status-badge').className = 'badge off';
+  });
+  setInterval(() => {
+    refreshStatus();
+    refreshLists();
+  }, 4000);
+})();
+</script>
+</body>
+</html>
